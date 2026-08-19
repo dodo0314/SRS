@@ -90,6 +90,17 @@ const splitList = (v) =>
 
 const isTrue = (v) => /^(true|yes|1|on)$/i.test(String(v ?? '').trim());
 
+/**
+ * 근거 표시에서 마크다운 링크를 벗겨 읽을 수 있는 문장만 남긴다.
+ * `[상법 제680조](경로.md) 시행 2026-07-23` → `상법 제680조 시행 2026-07-23`
+ */
+function sourceLabelOf(source) {
+  return String(source)
+    .replace(/\[([^\]]*)\]\(([^)]+)\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** 근거 값이 저장소 안의 파일을 가리키는지 판단한다. */
 function sourcePathOf(source) {
   if (!source) return null;
@@ -108,7 +119,8 @@ function sourcePathOf(source) {
  */
 function extractCloze(text) {
   const spans = [];
-  let work = text;
+  // 자리표시자로 쓰는 문자가 본문에 있으면 먼저 걷어낸다.
+  let work = String(text).replace(/[\u27E6\u27E7]/g, '');
 
   work = work.replace(/\{\{c(\d+)::([\s\S]*?)\}\}/g, (_, n, content) => {
     const token = `⟦${spans.length}⟧`;
@@ -129,13 +141,32 @@ function extractCloze(text) {
   return { template: work, spans, groups };
 }
 
-/** 특정 그룹만 가린 문장을 만든다. reveal이면 그 그룹을 강조해 보여준다. */
+/** 중첩된 자리표시자를 원래 글자로 되돌린다. 정답 문자열에 쓴다. */
+function resolveSpans(text, spans) {
+  let out = String(text);
+  for (let i = 0; i < 8 && /\u27E6\d+\u27E7/.test(out); i++) {
+    out = out.replace(/\u27E6(\d+)\u27E7/g, (_, idx) => (spans[Number(idx)] ? spans[Number(idx)].content : ''));
+  }
+  return out.replace(/\u27E6\d+\u27E7/g, '');
+}
+
+/**
+ * 특정 그룹만 가린 문장을 만든다. reveal이면 그 그룹을 강조해 보여준다.
+ * 표기를 겹쳐 쓴 카드에서는 자리표시자가 중첩되므로 남지 않을 때까지 편다.
+ */
 function renderCloze(template, spans, group, reveal) {
-  return template.replace(/⟦(\d+)⟧/g, (_, idx) => {
-    const span = spans[Number(idx)];
-    if (span.group !== group) return span.content;
-    return reveal ? `<<CLOZE>>${span.content}<</CLOZE>>` : '[ … ]';
-  });
+  const expand = (text) =>
+    text.replace(/\u27E6(\d+)\u27E7/g, (whole, idx) => {
+      const span = spans[Number(idx)];
+      if (!span) return '';
+      if (span.group !== group) return span.content;
+      return reveal ? `<<CLOZE>>${span.content}<</CLOZE>>` : '[ … ]';
+    });
+
+  let out = template;
+  for (let i = 0; i < 8 && /\u27E6\d+\u27E7/.test(out); i++) out = expand(out);
+  // 그래도 남으면 표기가 망가진 것이다. 자리표시자를 노출시키지 않는다.
+  return out.replace(/\u27E6\d+\u27E7/g, '');
 }
 
 function clozeToHtml(text) {
@@ -214,7 +245,7 @@ export function parseFile(path, text) {
       tags: [...new Set(tags)],
       file: path,
       line: block.line,
-      source,
+      source: source ? sourceLabelOf(source) : null,
       sourcePath: sourcePathOf(source),
       warn,
     };
@@ -261,7 +292,9 @@ export function parseFile(path, text) {
         });
       } else {
         groups.forEach((group, i) => {
-          const answers = spans.filter((s) => s.group === group).map((s) => s.content);
+          const answers = spans
+            .filter((s) => s.group === group)
+            .map((s) => resolveSpans(s.content, spans));
           cards.push({
             ...base,
             id: makeId(`c${i + 1}`),
