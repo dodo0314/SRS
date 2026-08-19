@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SRS</title>
+<meta name="theme-color" content="#12131a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SRS">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="toast" class="toast" hidden></div>
+
+<!-- 첫 실행: 저장소 연결 -->
+<section id="view-setup" class="view" hidden>
+  <div class="wrap">
+    <h1 class="brand">SRS</h1>
+    <p class="lede">복습 카드는 GitHub 저장소에서 읽고, 복습 기록은 같은 저장소에 저장한다. 시작하려면 저장소와 토큰을 넣는다.</p>
+    <div class="field"><label for="su-owner">GitHub 사용자명</label><input id="su-owner" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="dodo0314"></div>
+    <div class="field"><label for="su-repo">저장소</label><input id="su-repo" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="my-ai-chat"></div>
+    <div class="field"><label for="su-branch">브랜치</label><input id="su-branch" autocapitalize="off" autocorrect="off" spellcheck="false" value="main"></div>
+    <div class="field">
+      <label for="su-token">액세스 토큰</label>
+      <input id="su-token" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="github_pat_...">
+      <p class="hint">이 기기에만 저장된다. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">토큰 발급</a> → Repository access는 저장소 하나만, Permissions는 Contents: Read and write.</p>
+    </div>
+    <button id="su-connect" class="btn primary block">연결하고 카드 받기</button>
+    <p id="su-status" class="status"></p>
+  </div>
+</section>
+
+<!-- 홈 -->
+<section id="view-home" class="view" hidden>
+  <header class="bar">
+    <h1>오늘</h1>
+    <div class="bar-actions">
+      <button id="btn-sync" class="icon-btn" title="동기화" aria-label="동기화">⟳</button>
+      <button id="btn-settings" class="icon-btn" title="설정" aria-label="설정">⚙</button>
+    </div>
+  </header>
+  <div class="wrap">
+    <div class="today">
+      <div class="today-num"><strong id="home-due">0</strong><span>복습</span></div>
+      <div class="today-num"><strong id="home-new">0</strong><span>신규</span></div>
+      <div class="today-num"><strong id="home-streak">0</strong><span>연속일</span></div>
+    </div>
+    <button id="btn-start" class="btn primary block big">복습 시작</button>
+    <p id="home-held" class="status"></p>
+
+    <h2 class="section-title">덱</h2>
+    <div id="deck-list" class="decks"></div>
+
+    <div id="home-warnings" class="warnbox" hidden></div>
+
+    <nav class="tabs">
+      <button class="tab" data-go="stats">통계</button>
+      <button class="tab" data-go="settings">설정</button>
+    </nav>
+    <p id="sync-status" class="status foot"></p>
+  </div>
+</section>
+
+<!-- 복습 -->
+<section id="view-review" class="view" hidden>
+  <header class="bar">
+    <button id="btn-quit" class="icon-btn" aria-label="끝내기">✕</button>
+    <div id="review-counts" class="counts"></div>
+    <button id="btn-undo" class="icon-btn" aria-label="되돌리기" disabled>↩</button>
+  </header>
+
+  <main class="card-area">
+    <div id="card-meta" class="card-meta"></div>
+    <div id="card-front" class="card-face"></div>
+    <div id="card-back" class="card-face back" hidden></div>
+    <div id="card-points" class="points" hidden></div>
+    <div id="card-source" class="source" hidden></div>
+  </main>
+
+  <footer class="actions">
+    <button id="btn-reveal" class="btn primary block big">답 보기</button>
+    <div id="grade-row" class="grades" hidden>
+      <button class="btn grade g1" data-grade="1"><span>Again</span><em>10분</em></button>
+      <button class="btn grade g2" data-grade="2"><span>Hard</span><em></em></button>
+      <button class="btn grade g3" data-grade="3"><span>Good</span><em></em></button>
+      <button class="btn grade g4" data-grade="4"><span>Easy</span><em></em></button>
+    </div>
+  </footer>
+</section>
+
+<!-- 세션 종료 -->
+<section id="view-done" class="view" hidden>
+  <div class="wrap center">
+    <h1 class="brand">끝</h1>
+    <p id="done-summary" class="lede"></p>
+    <button id="btn-done-home" class="btn primary block">홈으로</button>
+  </div>
+</section>
+
+<!-- 통계 -->
+<section id="view-stats" class="view" hidden>
+  <header class="bar">
+    <button class="icon-btn" data-go="home" aria-label="뒤로">‹</button>
+    <h1>통계</h1>
+    <span class="icon-btn ghost"></span>
+  </header>
+  <div class="wrap">
+    <div class="today">
+      <div class="today-num"><strong id="st-today">0</strong><span>오늘 복습</span></div>
+      <div class="today-num"><strong id="st-retention">–</strong><span>정답률 30일</span></div>
+      <div class="today-num"><strong id="st-streak">0</strong><span>연속일</span></div>
+    </div>
+    <h2 class="section-title">앞으로 30일 예정</h2>
+    <div id="forecast" class="forecast"></div>
+    <h2 class="section-title">카드 상태</h2>
+    <div id="st-breakdown" class="breakdown"></div>
+    <h2 class="section-title">최근 14일</h2>
+    <div id="history" class="forecast"></div>
+  </div>
+</section>
+
+<!-- 설정 -->
+<section id="view-settings" class="view" hidden>
+  <header class="bar">
+    <button class="icon-btn" data-go="home" aria-label="뒤로">‹</button>
+    <h1>설정</h1>
+    <span class="icon-btn ghost"></span>
+  </header>
+  <div class="wrap">
+    <h2 class="section-title">저장소</h2>
+    <div class="field"><label for="se-owner">사용자명</label><input id="se-owner" autocapitalize="off" spellcheck="false"></div>
+    <div class="field"><label for="se-repo">저장소</label><input id="se-repo" autocapitalize="off" spellcheck="false"></div>
+    <div class="field"><label for="se-branch">브랜치</label><input id="se-branch" autocapitalize="off" spellcheck="false"></div>
+    <div class="field"><label for="se-cards">카드 폴더</label><input id="se-cards" autocapitalize="off" spellcheck="false"></div>
+    <div class="field"><label for="se-review">복습 기록 파일</label><input id="se-review" autocapitalize="off" spellcheck="false"></div>
+    <div class="field"><label for="se-token">토큰</label><input id="se-token" type="password" autocapitalize="off" spellcheck="false" placeholder="바꿀 때만 입력"></div>
+    <div class="row">
+      <button id="btn-verify" class="btn">연결 확인</button>
+      <button id="btn-save-repo" class="btn primary">저장</button>
+    </div>
+    <p id="se-status" class="status"></p>
+
+    <h2 class="section-title">학습량</h2>
+    <div class="field"><label for="se-new">하루 신규 카드</label><input id="se-new" type="number" min="0" max="500" inputmode="numeric"></div>
+    <div class="field"><label for="se-max">하루 복습 상한</label><input id="se-max" type="number" min="10" max="2000" inputmode="numeric"></div>
+
+    <h2 class="section-title">스케줄</h2>
+    <div class="field">
+      <label for="se-retention">목표 유지율 <span id="se-retention-val" class="mono"></span></label>
+      <input id="se-retention" type="range" min="0.80" max="0.97" step="0.01">
+      <p class="hint">높일수록 자주 본다. 시험이 가까우면 올리고, 장기 유지가 목적이면 0.9 근처가 효율이 좋다.</p>
+    </div>
+    <div class="field"><label for="se-maxint">최대 간격(일)</label><input id="se-maxint" type="number" min="1" max="36500" inputmode="numeric"></div>
+    <label class="check"><input id="se-fuzz" type="checkbox"> 간격을 조금씩 흩뜨려 같은 날 몰리지 않게 한다</label>
+    <button id="btn-save-study" class="btn primary block">학습 설정 저장</button>
+
+    <h2 class="section-title">카드 파일 문제</h2>
+    <div id="se-errors" class="warnbox">아직 확인하지 않았다.</div>
+
+    <h2 class="section-title">데이터</h2>
+    <p id="se-usage" class="status"></p>
+    <div class="row">
+      <button id="btn-export" class="btn">내보내기</button>
+      <button id="btn-import" class="btn">가져오기</button>
+    </div>
+    <input id="file-import" type="file" accept="application/json" hidden>
+    <p class="hint">홈 화면 아이콘을 지우면 이 기기의 학습 기록도 사라진다. 기록은 동기화로 저장소에 남지만, 마지막 동기화 이후 분은 사라진다.</p>
+    <div class="row">
+      <button id="btn-reset-local" class="btn danger">이 기기 데이터 지우기</button>
+    </div>
+    <p class="status foot" id="se-version"></p>
+  </div>
+</section>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

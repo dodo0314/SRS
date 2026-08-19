@@ -1,0 +1,17 @@
+{
+  "name": "SRS 복습",
+  "short_name": "SRS",
+  "description": "GitHub 저장소의 마크다운 카드로 복습하는 간격 반복 앱",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#12131a",
+  "theme_color": "#12131a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
