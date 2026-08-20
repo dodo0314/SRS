@@ -3,7 +3,7 @@
 // 앱 껍데기는 캐시에서 즉시 내주고 뒤에서 새 버전을 받아둔다(stale-while-revalidate).
 // 다음 실행 때 새 버전이 뜬다. GitHub API 응답은 절대 캐시하지 않는다.
 
-const CACHE = 'srs-shell-v6';
+const CACHE = 'srs-shell-v7';
 const SHELL = [
   './',
   './index.html',
@@ -24,7 +24,12 @@ const SHELL = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
+    caches
+      .open(CACHE)
+      // HTTP 캐시를 우회해 원본에서 받는다. Pages의 max-age 때문에
+      // 배포 직후 파일별로 신구가 섞이는 것을 막는다.
+      .then((cache) => cache.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -47,7 +52,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.open(CACHE).then(async (cache) => {
       const cached = await cache.match(request, { ignoreSearch: true });
-      const network = fetch(request)
+      const network = fetch(request, { cache: 'no-cache' })
         .then((res) => {
           if (res && res.ok) cache.put(request, res.clone());
           return res;
