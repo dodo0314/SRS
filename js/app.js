@@ -15,7 +15,7 @@ import { judgeSentence, VERDICT_LABEL } from './coach.js';
 const TOKEN_KEY = 'srs.token';
 const ANTHROPIC_KEY = 'srs.anthropicKey';
 const GEMINI_KEY = 'srs.geminiKey';
-const APP_VERSION = '1.4.2';
+const APP_VERSION = '1.4.3';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
