@@ -114,6 +114,14 @@ export class Sync {
   async pullCards(onProgress = () => {}) {
     const remote = await this.repo.listMarkdown(this.config.cardsDir);
     const cached = await db.getAll(db.STORES.FILES);
+
+    // 안전장치: 원격 목록이 비었는데 로컬에 카드가 있으면 지우지 않고 멈춘다.
+    // 브랜치·경로 설정 오류, 저장소 훼손(예: vault 백업 사고), 404가 전부 이 경로로 들어온다.
+    if (!remote.length && cached.length) {
+      throw new Error(
+        `카드 폴더(${this.config.cardsDir})가 비어 보인다. 저장소·브랜치·폴더 설정을 확인하라. 로컬 카드 ${cached.length}개 파일은 지우지 않았다.`
+      );
+    }
     const cachedByPath = new Map(cached.map((f) => [f.path, f]));
 
     const stale = remote.filter((f) => cachedByPath.get(f.path)?.sha !== f.sha);
