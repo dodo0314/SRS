@@ -4,13 +4,14 @@
 // 앱은 항상 이 로컬 저장소를 먼저 읽고 쓴다. GitHub 동기화는 그 뒤에 따라온다.
 
 const DB_NAME = 'srs';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 export const STORES = {
   CARDS: 'cards',
   STATES: 'states',
   LOGS: 'logs',
   KV: 'kv',
   FILES: 'files',
+  SENTENCES: 'sentences',
 };
 
 let dbPromise = null;
@@ -39,6 +40,11 @@ export function open() {
       if (!db.objectStoreNames.contains(STORES.FILES)) {
         // 카드 파일 원문 캐시. sha가 같으면 다시 내려받지 않는다.
         db.createObjectStore(STORES.FILES, { keyPath: 'path' });
+      }
+      if (!db.objectStoreNames.contains(STORES.SENTENCES)) {
+        // 작문 코치 기록. 동기화 때 저장소로 올라가면 pushed가 1이 된다.
+        const s = db.createObjectStore(STORES.SENTENCES, { keyPath: 'key' });
+        s.createIndex('at', 'at');
       }
     };
     req.onsuccess = () => resolve(req.result);

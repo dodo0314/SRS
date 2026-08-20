@@ -242,6 +242,7 @@ a { color: var(--accent); }
 .card-face mark { background: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--text); padding: 1px 3px; border-radius: 4px; }
 .card-face.back { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 18px; }
 .cloze-gap { color: var(--accent); font-weight: 700; }
+.cloze-answer { color: var(--accent); font-weight: 700; margin: 0 0 12px; }
 
 /* 논점 카드 */
 .points { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
@@ -277,6 +278,31 @@ a { color: var(--accent); }
 .point[aria-pressed="true"] .box { background: var(--good); border-color: var(--good); color: #fff; }
 .points-tally { font-size: 14px; color: var(--muted); margin: 4px 0 12px; }
 .points-note { font-size: 15px; color: var(--muted); margin-bottom: 10px; }
+.card-note { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 15px; color: var(--muted); }
+
+/* 작문 코치 */
+.compose { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
+.compose label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+.compose textarea {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  min-height: 60px;
+  resize: vertical;
+}
+.compose .row { margin-top: 8px; }
+.compose-result { margin-top: 12px; font-size: 15px; line-height: 1.5; }
+.compose-result .cv { font-weight: 700; margin: 0 0 6px; }
+.compose-result .cv.natural { color: var(--good); }
+.compose-result .cv.minor { color: var(--warn); }
+.compose-result .cv.wrong { color: var(--again); }
+.compose-result p { margin: 0 0 6px; }
+.compose-result .better { color: var(--accent); }
 
 .source { margin-top: 20px; font-size: 14px; }
 .source a, .source span { color: var(--muted); }

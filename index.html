@@ -105,6 +105,15 @@
     <div id="card-back" class="card-face back" hidden></div>
     <div id="card-points" class="points" hidden></div>
     <div id="card-source" class="source" hidden></div>
+    <div id="card-compose" class="compose" hidden>
+      <label for="compose-input">이 표현으로 문장 만들기</label>
+      <textarea id="compose-input" rows="2" autocapitalize="sentences" autocomplete="off" spellcheck="false" placeholder="영어로 문장을 직접 만들어 본다"></textarea>
+      <div class="row">
+        <button id="btn-judge" class="btn">판정 받기</button>
+      </div>
+      <p id="compose-hint" class="hint" hidden>설정 → 작문 코치에 Claude API 키를 넣으면 판정을 받을 수 있다.</p>
+      <div id="compose-result" class="compose-result" hidden></div>
+    </div>
   </main>
 
   <footer class="actions">
@@ -193,6 +202,13 @@
     <div class="field"><label for="se-maxint">최대 간격(일)</label><input id="se-maxint" type="number" min="1" max="36500" inputmode="numeric"></div>
     <label class="check"><input id="se-fuzz" type="checkbox"> 간격을 조금씩 흩뜨려 같은 날 몰리지 않게 한다</label>
     <button id="btn-save-study" class="btn primary block">학습 설정 저장</button>
+
+    <h2 class="section-title">작문 코치</h2>
+    <div class="field"><label for="se-anthropic">Claude API 키</label><input id="se-anthropic" type="password" autocapitalize="off" spellcheck="false" placeholder="바꿀 때만 입력"></div>
+    <div class="field"><label for="se-gemini">Gemini API 키</label><input id="se-gemini" type="password" autocapitalize="off" spellcheck="false" placeholder="바꿀 때만 입력"></div>
+    <p class="hint">둘 중 하나만 넣으면 된다. 둘 다 있으면 Claude(Sonnet)를 쓴다. 키는 이 기기에만 저장된다. Claude는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>(크레딧 충전 필요), Gemini는 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com</a>(무료 티어). <code>compose: true</code>인 카드(영어 덱)에서 만든 문장을 판정하고, 문장과 코멘트는 동기화 때 저장소 <code>srs/sentences/</code>에 월별 파일로 쌓인다.</p>
+    <button id="btn-save-coach" class="btn primary block">코치 설정 저장</button>
+    <p id="coach-status" class="status"></p>
 
     <h2 class="section-title">카드 파일 문제</h2>
     <div id="se-errors" class="warnbox">아직 확인하지 않았다.</div>

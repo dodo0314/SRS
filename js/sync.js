@@ -7,6 +7,7 @@
 import * as db from './db.js';
 import { GitHubRepo } from './github.js';
 import { parseAll } from './parser.js';
+import { appendSentences } from './coach.js';
 
 export const REVIEW_VERSION = 1;
 
@@ -100,6 +101,7 @@ export const DEFAULT_CONFIG = {
   branch: 'main',
   cardsDir: 'srs/cards',
   reviewPath: 'srs/review.json',
+  sentencesDir: 'srs/sentences',
 };
 
 export class Sync {
@@ -221,6 +223,46 @@ export class Sync {
     }
   }
 
+  /**
+   * 아직 안 올라간 작문 기록을 월별 파일에 이어 붙인다.
+   * 파일은 사람이 읽는 마크다운이라 병합하지 않고 항상 뒤에만 붙인다.
+   */
+  async pushSentences({ retry = true } = {}) {
+    const all = await db.getAll(db.STORES.SENTENCES);
+    const pending = all.filter((e) => !e.pushed).sort((a, b) => a.at - b.at);
+    if (!pending.length) return { pushed: 0 };
+
+    const byMonth = new Map();
+    for (const e of pending) {
+      const month = String(e.day || '').slice(0, 7);
+      if (!byMonth.has(month)) byMonth.set(month, []);
+      byMonth.get(month).push(e);
+    }
+
+    let pushed = 0;
+    for (const [month, entries] of byMonth) {
+      const path = `${this.config.sentencesDir}/${month}.md`;
+      try {
+        const file = await this.repo.readFileIfExists(path);
+        const text = appendSentences(file ? file.text : '', entries, month);
+        await this.repo.writeFile(path, text, {
+          sha: file ? file.sha : undefined,
+          message: `srs: 작문 ${entries.length}문장`,
+        });
+      } catch (e) {
+        if (retry && (e.status === 409 || e.status === 422)) {
+          return this.pushSentences({ retry: false });
+        }
+        throw e;
+      }
+      for (const e of entries) {
+        await db.put(db.STORES.SENTENCES, { ...e, pushed: 1 });
+      }
+      pushed += entries.length;
+    }
+    return { pushed };
+  }
+
   async syncAll(onProgress = () => {}) {
     onProgress('카드 목록 확인 중');
     const cards = await this.pullCards(onProgress);
@@ -228,7 +270,8 @@ export class Sync {
     const pulled = await this.pullState();
     onProgress('복습 기록 올리는 중');
     const pushed = await this.pushState();
+    const sentences = await this.pushSentences();
     await db.trimLogs();
-    return { cards, pulled, pushed };
+    return { cards, pulled, pushed, sentences };
   }
 }

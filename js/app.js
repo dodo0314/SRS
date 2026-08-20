@@ -10,9 +10,12 @@ import {
   buildQueue, Session, countIntroducedToday, forecast, startOfDay, DEFAULT_LIMITS,
 } from './queue.js';
 import { renderTodo } from './todo.js';
+import { judgeSentence, VERDICT_LABEL } from './coach.js';
 
 const TOKEN_KEY = 'srs.token';
-const APP_VERSION = '1.2.0';
+const ANTHROPIC_KEY = 'srs.anthropicKey';
+const GEMINI_KEY = 'srs.geminiKey';
+const APP_VERSION = '1.4.0';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
@@ -61,6 +64,19 @@ function toast(message, ms = 2600) {
 
 const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
 const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
+const getApiKey = () => localStorage.getItem(ANTHROPIC_KEY) || '';
+const setApiKey = (k) => localStorage.setItem(ANTHROPIC_KEY, k);
+const getGeminiKey = () => localStorage.getItem(GEMINI_KEY) || '';
+const setGeminiKey = (k) => localStorage.setItem(GEMINI_KEY, k);
+
+/** 넣어둔 키로 판정 제공자를 정한다. 둘 다 있으면 Claude. */
+function coachConfig() {
+  const a = getApiKey();
+  if (a) return { provider: 'anthropic', apiKey: a };
+  const g = getGeminiKey();
+  if (g) return { provider: 'gemini', apiKey: g };
+  return null;
+}
 
 function syncClient() {
   const token = getToken();
@@ -288,6 +304,7 @@ function renderCard() {
   $('card-points').hidden = true;
   $('card-points').innerHTML = '';
   $('card-source').hidden = true;
+  $('card-compose').hidden = true;
   $('btn-reveal').hidden = false;
   $('grade-row').hidden = true;
   els('.grade').forEach((b) => b.classList.remove('suggest'));
@@ -302,7 +319,13 @@ function reveal() {
   if (card.type === 'points') {
     renderPoints(card);
   } else {
-    $('card-back').innerHTML = card.back;
+    // 빈칸 카드는 앞뒤 문장이 같아 보인다. 정답을 먼저 못박고 문장을 보여준다.
+    const answer =
+      card.type === 'cloze' && card.answer
+        ? `<p class="cloze-answer">${escapeHtml(card.answer)}</p>`
+        : '';
+    $('card-back').innerHTML =
+      answer + card.back + (card.note ? `<div class="card-note">${card.note}</div>` : '');
     $('card-back').hidden = false;
   }
 
@@ -327,6 +350,62 @@ function reveal() {
   $('btn-reveal').hidden = true;
   $('grade-row').hidden = false;
   if (card.type === 'points') updateSuggestion();
+  if (card.compose) showCompose();
+}
+
+/* ---------- 작문 코치 ---------- */
+
+function showCompose() {
+  const hasKey = !!coachConfig();
+  $('compose-input').value = '';
+  $('compose-result').hidden = true;
+  $('compose-result').innerHTML = '';
+  $('compose-hint').hidden = hasKey;
+  $('btn-judge').disabled = !hasKey;
+  $('btn-judge').textContent = '판정 받기';
+  $('card-compose').hidden = false;
+}
+
+async function judgeCompose() {
+  const card = state.current && state.current.card;
+  const sentence = $('compose-input').value.trim();
+  if (!card || !sentence) return;
+  const btn = $('btn-judge');
+  btn.disabled = true;
+  btn.textContent = '판정 중…';
+  try {
+    const v = await judgeSentence({ ...coachConfig(), card, sentence });
+    const box = $('compose-result');
+    box.innerHTML =
+      `<p class="cv ${v.verdict}">${escapeHtml(VERDICT_LABEL[v.verdict])}</p>` +
+      `<p>${escapeHtml(v.comment)}</p>` +
+      (v.better && v.better.trim() !== sentence ? `<p class="better">→ ${escapeHtml(v.better)}</p>` : '');
+    box.hidden = false;
+
+    const at = Date.now();
+    const d = new Date(at);
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await db.put(db.STORES.SENTENCES, {
+      key: `${at}-${card.id}`,
+      at,
+      day,
+      cardId: card.id,
+      deck: card.deck,
+      expression: card.title || card.frontText,
+      sentence,
+      verdict: v.verdict,
+      comment: v.comment,
+      better: v.better,
+      pushed: 0,
+    });
+  } catch (e) {
+    const box = $('compose-result');
+    box.innerHTML = `<p class="cv wrong">${escapeHtml(e.message)}</p>`;
+    box.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '다시 판정';
+  }
 }
 
 function renderPoints(card) {
@@ -514,6 +593,8 @@ async function renderSettings() {
   $('se-cards').value = state.config.cardsDir;
   $('se-review').value = state.config.reviewPath;
   $('se-token').value = '';
+  $('se-anthropic').value = '';
+  $('se-gemini').value = '';
   $('se-new').value = state.limits.newPerDay;
   $('se-max').value = state.limits.maxReviews;
   $('se-retention').value = state.fsrs.requestRetention;
@@ -686,6 +767,7 @@ function wire() {
   $('btn-quit').addEventListener('click', finishSession);
   $('btn-undo').addEventListener('click', undo);
   $('btn-reveal').addEventListener('click', reveal);
+  $('btn-judge').addEventListener('click', judgeCompose);
   $('btn-done-home').addEventListener('click', async () => {
     await loadData();
     renderHome();
@@ -730,6 +812,15 @@ function wire() {
   });
 
   $('btn-save-repo').addEventListener('click', saveRepoSettings);
+  $('btn-save-coach').addEventListener('click', () => {
+    const a = $('se-anthropic').value.trim();
+    const g = $('se-gemini').value.trim();
+    if (a) setApiKey(a);
+    if (g) setGeminiKey(g);
+    const saved = [a && 'Claude', g && 'Gemini'].filter(Boolean).join(', ');
+    $('coach-status').textContent = saved ? `${saved} 키를 저장했다.` : '키가 비어 있어 바꾸지 않았다.';
+    $('coach-status').className = 'status ok';
+  });
   $('btn-save-study').addEventListener('click', saveStudySettings);
   $('se-retention').addEventListener('input', () => {
     $('se-retention-val').textContent = `${Math.round(Number($('se-retention').value) * 100)}%`;
@@ -776,7 +867,7 @@ function wire() {
 
   document.addEventListener('keydown', (e) => {
     if (!el('#view-review').classList.contains('active')) return;
-    if (e.target.tagName === 'INPUT') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       if (!state.revealed) reveal();

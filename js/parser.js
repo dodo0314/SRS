@@ -187,6 +187,7 @@ export function parseFile(path, text) {
   const fileTags = splitList(meta.tags);
   const fileType = CARD_TYPES.has(meta.type) ? meta.type : 'basic';
   const requireSource = isTrue(meta['require-source']);
+  const compose = isTrue(meta.compose);
   const enabled = meta.enabled === undefined ? true : isTrue(meta.enabled);
 
   const errors = [];
@@ -213,6 +214,7 @@ export function parseFile(path, text) {
     let source = null;
     const tags = [...fileTags];
     const bodyLines = [];
+    const noteLines = [];
 
     for (const line of block.lines) {
       if (/^\s*%%/.test(line)) continue;
@@ -232,6 +234,12 @@ export function parseFile(path, text) {
         source = src[1].trim();
         continue;
       }
+      // 해설은 뒷면에서만 보인다. 앞면에 두면 답이 새는 글이라 따로 뺀다.
+      const note = line.match(/^\s*>?\s*해설\s*:\s*(.*\S)\s*$/);
+      if (note) {
+        noteLines.push(note[1].trim());
+        continue;
+      }
       bodyLines.push(line);
     }
 
@@ -247,6 +255,8 @@ export function parseFile(path, text) {
       line: block.line,
       source: source ? sourceLabelOf(source) : null,
       sourcePath: sourcePathOf(source),
+      note: noteLines.length ? renderBlock(noteLines.join('\n')) : null,
+      compose,
       warn,
     };
     const idSeed = explicitId ? `@${explicitId}` : `${deck} ${block.front}`;
@@ -319,6 +329,7 @@ export function parseFile(path, text) {
         errors.push(`${path}:${block.line} "${block.front}" points 유형인데 목록이 없음`);
         continue;
       }
+      const noteText = [...notes, ...noteLines].join('\n');
       cards.push({
         ...base,
         id: makeId('p'),
@@ -326,7 +337,7 @@ export function parseFile(path, text) {
         frontText: block.front,
         front: renderBlock(block.front),
         points,
-        note: notes.length ? renderBlock(notes.join('\n')) : null,
+        note: noteText ? renderBlock(noteText) : null,
         back: renderBlock(points.map((p) => `- ${p}`).join('\n')),
       });
     }
