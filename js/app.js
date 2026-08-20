@@ -9,9 +9,10 @@ import {
 import {
   buildQueue, Session, countIntroducedToday, forecast, startOfDay, DEFAULT_LIMITS,
 } from './queue.js';
+import { renderTodo } from './todo.js';
 
 const TOKEN_KEY = 'srs.token';
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.2.0';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
@@ -83,6 +84,20 @@ async function loadSettings() {
   state.limits = { ...DEFAULT_LIMITS, ...(await db.getSetting('limits', {})) };
   state.fsrs = { ...state.fsrs, ...(await db.getSetting('fsrs', {})) };
   state.selectedDecks = await db.getSetting('selectedDecks', []);
+  state.todo = { wfhDow: 4, ...(await db.getSetting('todoConfig', {})) };
+}
+
+/* ---------- 오늘 표제와 To-Do ---------- */
+
+function todayLabel() {
+  const d = new Date();
+  const dow = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+  return `오늘 · ${d.getMonth() + 1}/${d.getDate()} (${dow})`;
+}
+
+function renderTodoView() {
+  $('todo-title').textContent = todayLabel();
+  renderTodo($('todo-list'), new Date(), state.todo.wfhDow);
 }
 
 async function loadData() {
@@ -109,16 +124,17 @@ function decksOf(cards) {
   return map;
 }
 
-function todayCounts() {
+function todayCounts(decks = state.selectedDecks) {
   const introduced = countIntroducedToday(state.logs, Date.now());
   return buildQueue(state.cards, state.states, {
     ...state.limits,
-    decks: state.selectedDecks,
+    decks,
     introducedToday: introduced,
   });
 }
 
 function renderHome() {
+  $('home-title').textContent = todayLabel();
   const { counts } = todayCounts();
   $('home-due').textContent = counts.due;
   $('home-new').textContent = counts.new;
@@ -128,8 +144,16 @@ function renderHome() {
   if (counts.dueHeld > 0) held.push(`복습 ${counts.dueHeld}장은 상한에 걸려 내일로`);
   if (counts.newHeld > 0) held.push(`신규 ${counts.newHeld}장 대기`);
   $('home-held').textContent = held.join(' · ');
+
+  const sel = state.selectedDecks.length;
   $('btn-start').disabled = counts.due + counts.new === 0;
-  $('btn-start').textContent = counts.due + counts.new === 0 ? '오늘 볼 카드 없음' : '복습 시작';
+  $('btn-start').textContent =
+    counts.due + counts.new === 0
+      ? (sel ? '선택한 덱에 오늘 볼 카드 없음' : '오늘 볼 카드 없음')
+      : (sel ? `선택한 덱 ${sel}개 복습 시작` : '복습 시작');
+  $('btn-clear-decks').hidden = !sel;
+  $('deck-sel-hint').hidden = !sel;
+  if (sel) $('deck-sel-hint').textContent = `덱 ${sel}개 선택됨 — 위 숫자와 복습이 선택한 덱 기준이다.`;
 
   renderDecks();
   renderWarnings();
@@ -170,18 +194,22 @@ function renderDecks() {
       const c = cutoffCounts.get(name) || { due: 0, new: 0, total: 0 };
       const on = state.selectedDecks.includes(name);
       const depth = name.split('/').length - 1;
-      return `<button class="deck" data-deck="${escapeAttr(name)}" aria-pressed="${on}" style="margin-left:${depth * 14}px">
-        <span class="deck-name">${escapeHtml(depth ? name.split('/').slice(1).join('/') : name)}</span>
-        <span class="deck-counts">
-          ${c.due ? `<span class="pill due">${c.due}</span>` : ''}
-          ${c.new ? `<span class="pill new">${c.new}</span>` : ''}
-          <span class="pill">${c.total}</span>
-        </span>
-      </button>`;
+      const label = depth ? name.split('/').slice(1).join('/') : name;
+      return `<div class="deck" style="margin-left:${depth * 14}px">
+        <button class="deck-select" data-deck="${escapeAttr(name)}" aria-pressed="${on}" aria-label="${escapeAttr(label)} 선택">
+          <span class="deck-name">${escapeHtml(label)}</span>
+          <span class="deck-counts">
+            ${c.due ? `<span class="pill due">${c.due}</span>` : ''}
+            ${c.new ? `<span class="pill new">${c.new}</span>` : ''}
+            <span class="pill">${c.total}</span>
+          </span>
+        </button>
+        <button class="deck-play" data-deck="${escapeAttr(name)}" aria-label="${escapeAttr(label)}만 바로 복습">▶</button>
+      </div>`;
     })
     .join('');
 
-  els('.deck', box).forEach((btn) =>
+  els('.deck-select', box).forEach((btn) =>
     btn.addEventListener('click', () => {
       const name = btn.dataset.deck;
       const i = state.selectedDecks.indexOf(name);
@@ -190,6 +218,10 @@ function renderDecks() {
       db.setSetting('selectedDecks', state.selectedDecks);
       renderHome();
     })
+  );
+
+  els('.deck-play', box).forEach((btn) =>
+    btn.addEventListener('click', () => startSession([btn.dataset.deck]))
   );
 }
 
@@ -206,8 +238,10 @@ async function renderWarnings() {
 
 /* ---------- 복습 ---------- */
 
-function startSession() {
-  const { items, counts } = todayCounts();
+/** decks를 주면 그 덱만으로 세션을 만든다. 없으면 홈의 선택 상태를 따른다. */
+function startSession(decks) {
+  const scope = Array.isArray(decks) && decks.length ? decks : state.selectedDecks;
+  const { items, counts } = todayCounts(scope);
   if (!items.length) {
     toast('오늘 볼 카드가 없다');
     return;
@@ -486,6 +520,7 @@ async function renderSettings() {
   $('se-retention-val').textContent = `${Math.round(state.fsrs.requestRetention * 100)}%`;
   $('se-maxint').value = state.fsrs.maximumInterval;
   $('se-fuzz').checked = state.fsrs.enableFuzz;
+  $('se-wfh').value = String(state.todo.wfhDow);
   $('se-version').textContent = `버전 ${APP_VERSION}`;
 
   const errors = await db.getSetting('parseErrors', []);
@@ -642,7 +677,12 @@ function wire() {
     renderSettings();
     show('settings');
   });
-  $('btn-start').addEventListener('click', startSession);
+  $('btn-start').addEventListener('click', () => startSession());
+  $('btn-clear-decks').addEventListener('click', () => {
+    state.selectedDecks = [];
+    db.setSetting('selectedDecks', state.selectedDecks);
+    renderHome();
+  });
   $('btn-quit').addEventListener('click', finishSession);
   $('btn-undo').addEventListener('click', undo);
   $('btn-reveal').addEventListener('click', reveal);
@@ -655,6 +695,24 @@ function wire() {
   els('.grade').forEach((btn) =>
     btn.addEventListener('click', () => answer(Number(btn.dataset.grade)))
   );
+
+  els('[data-ttab]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      if (btn.dataset.ttab === 'todo') {
+        renderTodoView();
+        show('todo');
+      } else {
+        renderHome();
+        show('home');
+      }
+    })
+  );
+
+  $('se-wfh').addEventListener('change', async () => {
+    state.todo.wfhDow = parseInt($('se-wfh').value, 10);
+    await db.setSetting('todoConfig', state.todo);
+    toast('재택 요일을 저장했다');
+  });
 
   els('[data-go]').forEach((btn) =>
     btn.addEventListener('click', () => {

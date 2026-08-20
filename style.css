@@ -47,6 +47,9 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
+  width: 100%;
+  /* 세로 스크롤만 허용한다. 내용이 삐져나가도 화면이 옆으로 밀리지 않는다. */
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
@@ -66,7 +69,9 @@ body { display: flex; flex-direction: column; }
   padding: var(--pad);
   padding-bottom: calc(var(--pad) + var(--safe-b));
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
+  min-width: 0;
   -webkit-overflow-scrolling: touch;
 }
 .wrap.center { display: flex; flex-direction: column; justify-content: center; text-align: center; }
@@ -107,6 +112,21 @@ body { display: flex; flex-direction: column; }
 .brand { font-size: 28px; margin: 8px 0 4px; letter-spacing: -.02em; }
 .lede { color: var(--muted); margin: 0 0 20px; }
 .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 28px 0 10px; font-weight: 600; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.section-head .section-title { flex: 1; }
+.mini-btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.mini-btn:active { background: var(--surface-2); }
 .status { color: var(--muted); font-size: 14px; min-height: 20px; margin: 10px 0 0; }
 .status.foot { margin-top: 24px; font-size: 13px; }
 .status.err { color: var(--again); }
@@ -142,7 +162,7 @@ a { color: var(--accent); }
 /* 오늘 숫자 */
 .today {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 18px;
 }
@@ -158,11 +178,14 @@ a { color: var(--accent); }
 
 /* 덱 목록 */
 .decks { display: flex; flex-direction: column; gap: 8px; }
-.deck {
+/* 들여쓰기는 margin-left로 하므로 행에 width를 주지 않는다. 주면 그만큼 옆으로 삐져나간다. */
+.deck { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.deck-select {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 100%;
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -173,8 +196,20 @@ a { color: var(--accent); }
   cursor: pointer;
   touch-action: manipulation;
 }
-.deck[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
-.deck-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deck-select[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.deck-play {
+  flex: 0 0 48px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 15px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.deck-play:active { background: var(--surface-2); }
+.deck-play:disabled { opacity: .35; }
+.deck-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .deck-counts { display: flex; gap: 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .pill { padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
 .pill.due { background: color-mix(in srgb, var(--easy) 22%, transparent); color: var(--text); }
@@ -190,6 +225,8 @@ a { color: var(--accent); }
 .card-area {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
   padding: 20px var(--pad);
   -webkit-overflow-scrolling: touch;
 }
@@ -197,7 +234,7 @@ a { color: var(--accent); }
 .tag { font-size: 12px; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 2px 9px; }
 .tag.warn { color: #1a1c25; background: var(--warn); font-weight: 600; }
 
-.card-face { font-size: 21px; line-height: 1.6; }
+.card-face { font-size: 21px; line-height: 1.6; overflow-wrap: break-word; }
 .card-face p { margin: 0 0 12px; }
 .card-face ul, .card-face ol { margin: 0 0 12px; padding-left: 22px; }
 .card-face li { margin-bottom: 6px; }
@@ -251,7 +288,7 @@ a { color: var(--accent); }
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
-.grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.grades { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .grade { flex-direction: column; padding: 10px 4px; min-height: 62px; gap: 2px; display: flex; align-items: center; justify-content: center; border: 0; color: #fff; }
 .grade span { font-size: 14px; font-weight: 700; }
 .grade em { font-size: 11px; font-style: normal; opacity: .85; font-variant-numeric: tabular-nums; }
@@ -332,7 +369,86 @@ a { color: var(--accent); }
   box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
 }
 
+/* 좁은 화면 (SE 등): 글자와 버튼을 줄여 4열 평가 버튼이 잘리지 않게 한다 */
+@media (max-width: 359px) {
+  html, body { font-size: 16px; }
+  .card-face { font-size: 19px; }
+  .grade span { font-size: 13px; }
+  .grade em { font-size: 10px; }
+  .today-num strong { font-size: 22px; }
+  .deck-play { flex-basis: 42px; }
+}
+
+/* 태블릿·데스크톱: 본문 폭을 제한해 줄 길이를 읽기 좋게 유지 */
 @media (min-width: 720px) {
   .wrap, .card-area, .actions { max-width: 680px; margin-left: auto; margin-right: auto; width: 100%; }
+  .bar { padding-left: calc((100% - 680px) / 2 + 12px); padding-right: calc((100% - 680px) / 2 + 12px); }
   .card-face { font-size: 22px; }
+}
+
+@media (min-width: 1100px) {
+  .wrap, .card-area, .actions { max-width: 760px; }
+  .bar { padding-left: calc((100% - 760px) / 2 + 12px); padding-right: calc((100% - 760px) / 2 + 12px); }
+}
+
+/* 가로 모드(폰): 상하 여백을 줄여 카드가 보이는 영역을 확보 */
+@media (max-height: 450px) and (orientation: landscape) {
+  .bar { padding-top: 6px; padding-bottom: 6px; }
+  .card-area { padding-top: 12px; }
+  .actions { padding-top: 6px; }
+  .btn.big { min-height: 48px; }
+  .grade { min-height: 52px; }
+}
+
+/* ---------- 상단 탭 (SRS / To-Do) ---------- */
+.top-tabs { display: flex; gap: 8px; margin: 4px 0 18px; }
+.ttab {
+  flex: 1; padding: 10px 0; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--muted); font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.ttab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* ---------- To-Do ---------- */
+.todo-banner {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 6px;
+}
+.todo-phase { font-size: 13px; color: var(--accent); font-weight: 700; }
+.todo-daytype { font-size: 17px; margin-top: 2px; }
+.todo-week { font-size: 13.5px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+.todo-progress { font-size: 13px; color: var(--muted); margin-top: 8px; font-variant-numeric: tabular-nums; }
+
+.todo-group { display: flex; flex-direction: column; gap: 8px; }
+.todo-task {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 10px 12px;
+}
+.todo-task.done { opacity: .55; }
+.todo-task.done .todo-title { text-decoration: line-through; }
+.todo-check {
+  flex: 0 0 30px; height: 30px; margin-top: 2px; border-radius: 8px;
+  border: 1.5px solid var(--line); background: var(--surface-2);
+  color: transparent; font-size: 16px; cursor: pointer;
+}
+.todo-check[aria-pressed="true"] { background: var(--good); border-color: var(--good); color: #fff; }
+.todo-task details { flex: 1; min-width: 0; }
+.todo-task summary {
+  display: flex; align-items: center; gap: 8px; list-style: none; cursor: pointer;
+  font-weight: 600; font-size: 15.5px; line-height: 1.4; min-height: 30px;
+}
+.todo-task summary::-webkit-details-marker { display: none; }
+.todo-task summary::after { content: '▾'; margin-left: auto; color: var(--muted); font-size: 12px; }
+.todo-task details[open] summary::after { content: '▴'; }
+.todo-title { min-width: 0; }
+.todo-detail {
+  margin: 8px 0 2px; font-size: 14.5px; line-height: 1.65; color: var(--muted);
+  border-top: 1px solid var(--line); padding-top: 8px; white-space: pre-line;
+}
+
+.field select {
+  width: 100%; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface-2);
+  color: var(--text); font-size: 16px; appearance: none;
 }
