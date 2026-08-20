@@ -165,8 +165,8 @@ async function judgeGemini({ apiKey, card, sentence, fetchFn, noThinkingConfig =
     responseMimeType: 'application/json',
     responseSchema: GEMINI_SCHEMA,
   };
-  // 짧은 판정에 사고 토큰은 낭비다. 무료 한도도 아낀다.
-  if (!noThinkingConfig) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  // 짧은 판정에 깊은 사고는 낭비다. 3.x부터는 thinkingLevel 문자열을 쓴다.
+  if (!noThinkingConfig) generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
 
   const res = await fetchFn(GEMINI_URL, {
     method: 'POST',
@@ -181,9 +181,9 @@ async function judgeGemini({ apiKey, card, sentence, fetchFn, noThinkingConfig =
   });
   const body = await res.json().catch(() => null);
   if (!res.ok) {
-    // 모델 세대가 바뀌면 thinkingConfig를 거부할 수 있다. 그 경우만 빼고 한 번 재시도.
-    const msg = (body && body.error && body.error.message) || '';
-    if (res.status === 400 && !noThinkingConfig && /thinking/i.test(msg)) {
+    // 모델 세대가 바뀌면 thinkingConfig 형식이 거부될 수 있는데, 오류 문구가
+    // 구체적이지 않은 경우가 많다. 400이면 설정을 빼고 한 번 재시도한다.
+    if (res.status === 400 && !noThinkingConfig) {
       return judgeGemini({ apiKey, card, sentence, fetchFn, noThinkingConfig: true });
     }
     throw new Error(geminiMessageFor(res.status, body));
