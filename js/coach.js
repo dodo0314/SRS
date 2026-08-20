@@ -6,7 +6,7 @@
 // 판정 결과와 문장은 IndexedDB에 쌓였다가 동기화 때 저장소의 월별 파일로 올라간다.
 
 export const COACH_MODEL = 'claude-sonnet-5';
-export const GEMINI_MODEL = 'gemini-2.5-flash';
+export const GEMINI_MODEL = 'gemini-3.6-flash';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
@@ -160,7 +160,14 @@ function geminiMessageFor(status, body) {
   return apiMsg ? `판정 실패: ${apiMsg}` : `판정 실패 (${status})`;
 }
 
-async function judgeGemini({ apiKey, card, sentence, fetchFn }) {
+async function judgeGemini({ apiKey, card, sentence, fetchFn, noThinkingConfig = false }) {
+  const generationConfig = {
+    responseMimeType: 'application/json',
+    responseSchema: GEMINI_SCHEMA,
+  };
+  // 짧은 판정에 사고 토큰은 낭비다. 무료 한도도 아낀다.
+  if (!noThinkingConfig) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+
   const res = await fetchFn(GEMINI_URL, {
     method: 'POST',
     headers: {
@@ -169,16 +176,18 @@ async function judgeGemini({ apiKey, card, sentence, fetchFn }) {
     },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: buildPrompt(card, sentence) }] }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: GEMINI_SCHEMA,
-        // 짧은 판정에 사고 토큰은 낭비다. 무료 한도도 아낀다.
-        thinkingConfig: { thinkingBudget: 0 },
-      },
+      generationConfig,
     }),
   });
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(geminiMessageFor(res.status, body));
+  if (!res.ok) {
+    // 모델 세대가 바뀌면 thinkingConfig를 거부할 수 있다. 그 경우만 빼고 한 번 재시도.
+    const msg = (body && body.error && body.error.message) || '';
+    if (res.status === 400 && !noThinkingConfig && /thinking/i.test(msg)) {
+      return judgeGemini({ apiKey, card, sentence, fetchFn, noThinkingConfig: true });
+    }
+    throw new Error(geminiMessageFor(res.status, body));
+  }
   return readGeminiVerdict(body);
 }
 
