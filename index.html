@@ -48,6 +48,7 @@
     <nav class="top-tabs">
       <button class="ttab active" data-ttab="srs">SRS</button>
       <button class="ttab" data-ttab="todo">To-Do</button>
+      <button class="ttab" data-ttab="dissect">해부</button>
     </nav>
     <div class="today">
       <div class="today-num"><strong id="home-due">0</strong><span>복습</span></div>
@@ -86,8 +87,27 @@
     <nav class="top-tabs">
       <button class="ttab" data-ttab="srs">SRS</button>
       <button class="ttab active" data-ttab="todo">To-Do</button>
+      <button class="ttab" data-ttab="dissect">해부</button>
     </nav>
     <div id="todo-list"></div>
+  </div>
+</section>
+
+<!-- 해부 (L0-A 약관 구조 해부) -->
+<section id="view-dissect" class="view" hidden>
+  <header class="bar">
+    <h1>해부</h1>
+    <div class="bar-actions">
+      <button class="icon-btn" data-go="settings" title="설정" aria-label="설정">⚙</button>
+    </div>
+  </header>
+  <div class="wrap">
+    <nav class="top-tabs">
+      <button class="ttab" data-ttab="srs">SRS</button>
+      <button class="ttab" data-ttab="todo">To-Do</button>
+      <button class="ttab active" data-ttab="dissect">해부</button>
+    </nav>
+    <div id="dissect-root"></div>
   </div>
 </section>
 

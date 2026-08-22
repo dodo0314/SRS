@@ -10,12 +10,13 @@ import {
   buildQueue, Session, countIntroducedToday, forecast, startOfDay, DEFAULT_LIMITS,
 } from './queue.js';
 import { renderTodo } from './todo.js';
+import { renderDissect } from './dissect.js';
 import { judgeSentence, VERDICT_LABEL } from './coach.js';
 
 const TOKEN_KEY = 'srs.token';
 const ANTHROPIC_KEY = 'srs.anthropicKey';
 const GEMINI_KEY = 'srs.geminiKey';
-const APP_VERSION = '1.4.3';
+const APP_VERSION = '1.6.0';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
@@ -780,9 +781,13 @@ function wire() {
 
   els('[data-ttab]').forEach((btn) =>
     btn.addEventListener('click', () => {
-      if (btn.dataset.ttab === 'todo') {
+      const t = btn.dataset.ttab;
+      if (t === 'todo') {
         renderTodoView();
         show('todo');
+      } else if (t === 'dissect') {
+        renderDissect($('dissect-root'), { toast });
+        show('dissect');
       } else {
         renderHome();
         show('home');
