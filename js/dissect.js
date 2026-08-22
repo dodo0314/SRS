@@ -2,7 +2,8 @@
 //
 // 수집한 국문 약관(보통약관)을 골라 담보/면책/조건·의무/정의/절차로 직접 분류하고,
 // 참조 관계를 메모하고, "보험금이 안 나오는 경로"를 목록으로 만든다.
-// 워크시트는 판정을 대신하지 않는다 — 분류는 비어 있는 상태로 시작한다.
+// 분류는 비어 있는 상태로 시작한다. 정답지는 내장돼 있으나 "채점하기"를 누르기
+// 전에는 어디에도 보이지 않는다 — 먼저 판정하고, 나중에 대조한다.
 // 진행 상태는 약관별로 이 기기에만 저장한다(To-Do 체크와 같은 방침).
 
 import * as db from './db.js';
@@ -18,6 +19,7 @@ export const TAGS = [
   { id: 'defn', ko: '정의', key: '4' },
   { id: 'proc', ko: '절차', key: '5' },
 ];
+const KO = Object.fromEntries(TAGS.map((t) => [t.id, t.ko]));
 
 const GUIDES = [
   '<b>1단계 · 색 분류 (30분)</b> — 조문마다 담보 / 면책 / 조건·의무 / 정의 중 하나. 넷에 안 들어가는 절차 조항은 <b>절차</b>로. 판정이 안 서면 <b>?</b> — 버리지 말 것, 분쟁은 그 경계에서 난다.',
@@ -31,12 +33,12 @@ const PHASE_SEC = [1800, 1800, 1800];
 const blankState = () => ({
   tags: {}, flags: {}, notes: {},
   paths: ['', '', ''],
-  phase: 0, left: [...PHASE_SEC], sub: 'clauses', xref: false,
+  phase: 0, left: [...PHASE_SEC], sub: 'clauses', xref: false, graded: false,
 });
 
-let cur = SOURCES[0];       // 지금 보는 약관
-let S = blankState();       // 그 약관의 진행 상태
-const cache = new Map();    // sourceId → 상태 (탭 왕복 시 재로드 방지)
+let cur = SOURCES[0];
+let S = blankState();
+const cache = new Map();
 let saveTimer = null;
 let clockTimer = null;
 
@@ -57,7 +59,25 @@ function save() {
   saveTimer = setTimeout(() => db.setSetting(stateKey(id), snap).catch(() => {}), 300);
 }
 
-/* ---------- 마크다운 내보내기 ---------- */
+/* ---------- 채점 ---------- */
+
+// 'match' 주 분류 일치 / 'alt' 허용 분류 / 'miss' 불일치 / 'none' 미분류
+export function gradeOf(clause, tags = S.tags) {
+  const t = tags[clause.no];
+  if (!t) return 'none';
+  const k = clause.key || {};
+  if (t === k.tag) return 'match';
+  if ((k.alt || []).includes(t)) return 'alt';
+  return 'miss';
+}
+
+export function gradeSummary(source = cur, tags = S.tags) {
+  const g = { match: [], alt: [], miss: [], none: [] };
+  source.clauses.forEach((c) => g[gradeOf(c, tags)].push(c));
+  return g;
+}
+
+/* ---------- 마크다운 ---------- */
 
 export function exportMarkdown(source = cur, state = S) {
   const L = [`# L0-A 약관 해부 — ${source.name} (${source.detail.split(' · ')[0]})`, ''];
@@ -68,12 +88,19 @@ export function exportMarkdown(source = cur, state = S) {
   TAGS.forEach((t) => L.push(`**${t.ko}** (${by[t.id].length}): ${by[t.id].join(' · ') || '—'}`));
   const un = source.clauses.filter((c) => !state.tags[c.no]);
   if (un.length) L.push('', `미분류 (${un.length}): ${un.map((c) => `제${c.no}조`).join(' ')}`);
+  if (state.graded) {
+    const g = gradeSummary(source, state.tags);
+    L.push('', `### 채점 — 일치 ${g.match.length} · 허용 ${g.alt.length} · 불일치 ${g.miss.length} · 미분류 ${g.none.length}`);
+    g.miss.forEach((c) => L.push(
+      `- 제${c.no}조(${c.title}): ${KO[state.tags[c.no]]} → 정답 ${KO[c.key.tag]}` +
+      (c.key.alt.length ? ` (허용: ${c.key.alt.map((a) => KO[a]).join('/')})` : '')));
+  }
   L.push('', '## 2단계 — 참조·발견 메모', '');
   const notes = source.clauses.filter((c) => (state.notes[c.no] || '').trim());
   L.push(...(notes.length
     ? notes.map((c) => `- **제${c.no}조(${c.title})** ${state.notes[c.no].trim().replace(/\n/g, ' ')}`)
     : ['_(없음)_']));
-  L.push('', '## 3단계 — 보험금이 안 나오는 경로', '');
+  L.push('', '## 3단계 — 보험금이 안 나오는 경로 (채점 요청)', '');
   const ps = state.paths.filter((v) => v.trim());
   L.push(ps.length ? ps.map((v, i) => `${i + 1}. ${v.trim()}`).join('\n') : '_(없음)_');
   L.push('', `완료 기준 5개 — ${ps.length >= 5 ? `충족 (${ps.length}개)` : `미충족 (${ps.length}개)`}`);
@@ -88,7 +115,6 @@ export function exportMarkdown(source = cur, state = S) {
 const esc = (s) => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-// 본문 속 "제N조"를 (참조 링크 토글이 켜졌을 때만) 이동 링크로
 const xref = (s, maxNo) => s.replace(/제(\d{1,2})조/g, (m, n) =>
   +n >= 1 && +n <= maxNo ? `<a class="dx-ref" href="#" data-jump="${n}">${m}</a>` : m);
 
@@ -99,6 +125,7 @@ const fmt = (sec) => {
 
 let root = null;
 let toastFn = () => {};
+let submitFn = null;
 const $$ = (sel) => (root ? [...root.querySelectorAll(sel)] : []);
 const $1 = (sel) => (root ? root.querySelector(sel) : null);
 
@@ -119,6 +146,7 @@ function clauseHtml(c, maxNo) {
     <div class="dx-body">${body}</div>
     <div class="dx-tags">${tags}
       <button class="dx-note-btn" data-note="${c.no}">메모</button></div>
+    <div class="dx-verdict" hidden></div>
     <textarea class="dx-note" data-notefor="${c.no}" placeholder="참조 관계 · 발견한 것"></textarea>
   </article>`;
 }
@@ -136,6 +164,19 @@ function paintClause(no) {
   const note = el2.querySelector('.dx-note');
   if (S.notes[no] && note.value !== S.notes[no]) note.value = S.notes[no];
   if (S.notes[no]) note.classList.add('open');
+  // 채점 후에만 정답을 보여준다
+  const v = el2.querySelector('.dx-verdict');
+  const c = cur.clauses.find((x) => x.no === +no);
+  if (S.graded && c && c.key) {
+    const g = gradeOf(c);
+    const label = { match: '일치', alt: '허용', miss: '불일치', none: '미분류' }[g];
+    const alt = c.key.alt.length ? ` (허용: ${c.key.alt.map((a) => KO[a]).join('/')})` : '';
+    v.hidden = false;
+    v.className = `dx-verdict v-${g}`;
+    v.innerHTML = `<b>${label}</b> · 정답 ${KO[c.key.tag]}${alt} — ${esc(c.key.why)}`;
+  } else {
+    v.hidden = true;
+  }
 }
 
 function paintSummary() {
@@ -169,6 +210,39 @@ function paintSummary() {
     crit.textContent = `완료 기준 5개 — ${n} / 5`;
     crit.classList.toggle('ok', n >= 5);
   }
+  paintGrade();
+}
+
+function paintGrade() {
+  const box = $1('#dx-grade');
+  if (!box) return;
+  if (!S.graded) {
+    const total = cur.clauses.length;
+    const done = cur.clauses.filter((c) => S.tags[c.no]).length;
+    box.innerHTML = `
+      <p class="status" style="margin:0 0 10px">분류를 마친 뒤 누른다. 정답지는 채점 전에는 보이지 않는다.
+      미분류 조문은 오답이 아니라 '미분류'로 집계된다. (${done}/${total} 분류됨)</p>
+      <button class="btn primary block" id="dx-dograde">채점하기</button>`;
+    return;
+  }
+  const g = gradeSummary();
+  const miss = g.miss.map((c) =>
+    `<button class="dx-q" data-jump="${c.no}">제${c.no}조 ${esc(c.title)}: ${KO[S.tags[c.no]]} → ${KO[c.key.tag]}</button>`
+  ).join('');
+  const edge = cur.clauses.filter((c) => c.key && c.key.alt.length).map((c) =>
+    `<div class="dx-edge"><button class="dx-q" data-jump="${c.no}">제${c.no}조 ${esc(c.title)}</button>
+     <span>주 ${KO[c.key.tag]} · 허용 ${c.key.alt.map((a) => KO[a]).join('/')} — ${esc(c.key.why)}</span></div>`
+  ).join('');
+  box.innerHTML = `
+    <div class="dx-score">
+      <span class="v-match"><b>${g.match.length}</b> 일치</span>
+      <span class="v-alt"><b>${g.alt.length}</b> 허용</span>
+      <span class="v-miss"><b>${g.miss.length}</b> 불일치</span>
+      <span class="v-none"><b>${g.none.length}</b> 미분류</span>
+    </div>
+    ${g.miss.length ? `<p class="dx-gh">불일치 — 조문의 정답·근거는 각 카드 아래에 떠 있다</p><div id="dx-misslist">${miss}</div>` : '<p class="status">불일치 없음.</p>'}
+    <details class="dx-edges"><summary>경계 조문 해설 (${cur.clauses.filter((c) => c.key && c.key.alt.length).length})</summary>${edge}</details>
+    <button class="mini-btn" id="dx-ungrade" style="margin-top:10px">채점 숨기기 (다시 풀기)</button>`;
 }
 
 function paintPhase() {
@@ -216,12 +290,13 @@ function jumpTo(no) {
   }
 }
 
-export async function renderDissect(container, { toast } = {}) {
+export async function renderDissect(container, { toast, submit } = {}) {
   const activeId = await db.getSetting(ACTIVE_KEY, SOURCES[0].id);
   cur = SOURCES.find((s) => s.id === activeId) || SOURCES[0];
   await loadState(cur.id);
   root = container;
   if (toast) toastFn = toast;
+  if (submit) submitFn = submit;
 
   const maxNo = cur.clauses[cur.clauses.length - 1].no;
   const groups = [];
@@ -261,11 +336,15 @@ export async function renderDissect(container, { toast } = {}) {
       <h2 class="section-title">분류 현황</h2>
       <div class="dx-card" id="dx-tally"></div>
 
+      <h2 class="section-title">분류 채점</h2>
+      <div class="dx-card" id="dx-grade"></div>
+
       <h2 class="section-title">보험금이 안 나오는 경로</h2>
       <div class="dx-card">
         <div id="dx-paths"></div>
         <button class="mini-btn" id="dx-addpath">경로 추가</button>
         <p class="status" id="dx-crit"></p>
+        <p class="status">경로·메모는 자유서술이라 정답지 채점이 아니라 Claude 채점 대상 — 아래 제출로 저장소에 남기면 나중에 한꺼번에 채점받는다.</p>
       </div>
 
       <h2 class="section-title">판정 보류 (?)</h2>
@@ -274,8 +353,9 @@ export async function renderDissect(container, { toast } = {}) {
       <h2 class="section-title">도구</h2>
       <div class="dx-card">
         <label class="check"><input type="checkbox" id="dx-xref"> 조문 참조 링크 표시 <span class="dx-hint">— 지도를 손으로 다 그린 뒤에만</span></label>
-        <button class="btn primary block" id="dx-export">결과 복사 (마크다운)</button>
-        <p class="status">복사한 마크다운을 vault의 판단일지에 붙여넣는다. 진행 상태는 약관별로 이 기기에만 저장된다.</p>
+        <button class="btn primary block" id="dx-submit">저장소에 제출 (md 저장)</button>
+        <button class="btn block" id="dx-export" style="margin-top:8px">결과 복사 (마크다운)</button>
+        <p class="status" id="dx-submit-status">제출하면 <code>srs/dissect/날짜-약관.md</code>로 커밋된다. 같은 날 재제출은 그 파일을 덮어쓴다.</p>
       </div>
     </div>`;
 
@@ -308,6 +388,19 @@ export async function renderDissect(container, { toast } = {}) {
     const sub = e.target.closest('.dx-sub');
     if (sub) { S.sub = sub.dataset.sub; paintSub(); save(); return; }
 
+    if (e.target.id === 'dx-dograde') {
+      S.graded = true;
+      cur.clauses.forEach((c) => paintClause(c.no));
+      paintGrade(); save();
+      const g = gradeSummary();
+      toastFn(`채점: 일치 ${g.match.length} · 허용 ${g.alt.length} · 불일치 ${g.miss.length}`);
+      return;
+    }
+    if (e.target.id === 'dx-ungrade') {
+      S.graded = false;
+      cur.clauses.forEach((c) => paintClause(c.no));
+      paintGrade(); save(); return;
+    }
     if (e.target.id === 'dx-run') {
       if (clockTimer) { stopClock(); return; }
       clockTimer = setInterval(() => {
@@ -326,6 +419,20 @@ export async function renderDissect(container, { toast } = {}) {
     if (e.target.id === 'dx-addpath') {
       S.paths.push(''); paintPaths(); save();
       const ins = $$('#dx-paths input'); ins[ins.length - 1]?.focus();
+      return;
+    }
+    if (e.target.id === 'dx-submit') {
+      const btn = e.target;
+      const status = $1('#dx-submit-status');
+      if (!submitFn) { status.textContent = '저장소 연결이 없다 — 설정을 확인할 것.'; return; }
+      btn.disabled = true; btn.textContent = '제출 중…';
+      submitFn(cur.id, exportMarkdown())
+        .then((path) => {
+          status.textContent = `제출됨: ${path}`;
+          toastFn('저장소에 제출했다');
+        })
+        .catch((err) => { status.textContent = `제출 실패: ${err.message}`; })
+        .finally(() => { btn.disabled = false; btn.textContent = '저장소에 제출 (md 저장)'; });
       return;
     }
     if (e.target.id === 'dx-export') {
@@ -359,11 +466,10 @@ export async function renderDissect(container, { toast } = {}) {
     if (e.target.id === 'dx-source') {
       stopClock();
       await db.setSetting(ACTIVE_KEY, e.target.value);
-      renderDissect(container, { toast: toastFn });
+      renderDissect(container, { toast: toastFn, submit: submitFn });
     }
   };
 
-  // 키보드(데스크톱): 조문 포커스 상태에서 1~5 태그, 0 해제, / 보류
   container.onkeydown = (e) => {
     const card = e.target.closest?.('.dx-clause');
     if (!card || e.target.tagName === 'TEXTAREA' || e.metaKey || e.ctrlKey) return;

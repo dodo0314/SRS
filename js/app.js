@@ -16,7 +16,7 @@ import { judgeSentence, VERDICT_LABEL } from './coach.js';
 const TOKEN_KEY = 'srs.token';
 const ANTHROPIC_KEY = 'srs.anthropicKey';
 const GEMINI_KEY = 'srs.geminiKey';
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.7.0';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
@@ -77,6 +77,22 @@ function coachConfig() {
   const g = getGeminiKey();
   if (g) return { provider: 'gemini', apiKey: g };
   return null;
+}
+
+/** 해부 결과를 저장소 srs/dissect/에 md로 커밋한다. 같은 날 같은 약관은 덮어쓴다. */
+async function submitDissect(sourceId, markdown) {
+  const token = getToken();
+  if (!token || !state.config.owner) throw new Error('저장소 연결이 없다');
+  const repo = new GitHubRepo({ ...state.config, token });
+  const d = new Date();
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const path = `srs/dissect/${day}-${sourceId}.md`;
+  const existing = await repo.readFileIfExists(path);
+  await repo.writeFile(path, markdown, {
+    sha: existing?.sha,
+    message: `dissect: ${day} ${sourceId} 해부 결과`,
+  });
+  return path;
 }
 
 function syncClient() {
@@ -786,7 +802,7 @@ function wire() {
         renderTodoView();
         show('todo');
       } else if (t === 'dissect') {
-        renderDissect($('dissect-root'), { toast });
+        renderDissect($('dissect-root'), { toast, submit: submitDissect });
         show('dissect');
       } else {
         renderHome();
