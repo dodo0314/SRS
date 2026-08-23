@@ -11,12 +11,12 @@ import {
 } from './queue.js';
 import { renderTodo } from './todo.js';
 import { renderDissect } from './dissect.js';
-import { judgeSentence, VERDICT_LABEL } from './coach.js';
+import { judgeSentence, VERDICT_LABEL, ERROR_LABEL } from './coach.js';
 
 const TOKEN_KEY = 'srs.token';
 const ANTHROPIC_KEY = 'srs.anthropicKey';
 const GEMINI_KEY = 'srs.geminiKey';
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
@@ -372,8 +372,14 @@ function reveal() {
 
 /* ---------- 작문 코치 ---------- */
 
+// 작문 코치는 2단이다. 1단은 정답을 주지 않고 어디가 틀렸는지만 짚고,
+// 학습자가 고쳐 쓴 뒤에야 2단에서 다듬은 문장을 보여준다 — 영어학습 2-1절
+// (Lyster & Saito 2010: 스스로 고치게 하는 prompt가 정답을 주는 recast보다 우월).
+let compose = { stage: 'hint', firstTry: null, hint: null };
+
 function showCompose() {
   const hasKey = !!coachConfig();
+  compose = { stage: 'hint', firstTry: null, hint: null };
   $('compose-input').value = '';
   $('compose-result').hidden = true;
   $('compose-result').innerHTML = '';
@@ -383,45 +389,79 @@ function showCompose() {
   $('card-compose').hidden = false;
 }
 
+function saveSentence(card, v, sentence) {
+  const at = Date.now();
+  const d = new Date(at);
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return db.put(db.STORES.SENTENCES, {
+    key: `${at}-${card.id}`,
+    at,
+    day,
+    cardId: card.id,
+    deck: card.deck,
+    expression: card.title || card.frontText,
+    sentence,
+    firstTry: compose.firstTry,
+    hint: compose.hint,
+    verdict: v.verdict,
+    errorType: v.errorType || 'other',
+    comment: v.comment,
+    better: v.better,
+    pushed: 0,
+  });
+}
+
 async function judgeCompose() {
   const card = state.current && state.current.card;
   const sentence = $('compose-input').value.trim();
   if (!card || !sentence) return;
   const btn = $('btn-judge');
+  const box = $('compose-result');
   btn.disabled = true;
   btn.textContent = '판정 중…';
   try {
-    const v = await judgeSentence({ ...coachConfig(), card, sentence });
-    const box = $('compose-result');
+    const v = await judgeSentence({
+      ...coachConfig(),
+      card,
+      sentence,
+      stage: compose.stage,
+      firstTry: compose.firstTry,
+      hint: compose.hint,
+    });
+    const label = escapeHtml(VERDICT_LABEL[v.verdict]);
+    const tag = v.errorType && v.errorType !== 'none'
+      ? ` <span class="etag">${escapeHtml(ERROR_LABEL[v.errorType] || v.errorType)}</span>`
+      : '';
+
+    if (compose.stage === 'hint' && v.verdict !== 'natural') {
+      // 1단: 정답을 보여주지 않고 다시 쓰게 한다.
+      compose = { stage: 'full', firstTry: sentence, hint: v.hint || v.comment };
+      box.innerHTML =
+        `<p class="cv ${v.verdict}">${label}${tag}</p>` +
+        `<p>${escapeHtml(v.hint || v.comment)}</p>` +
+        '<p class="hint">정답을 보기 전에 직접 고쳐 본다 — 위 칸을 고치고 다시 누른다.</p>';
+      box.hidden = false;
+      $('compose-input').focus();
+      btn.textContent = '고쳐서 다시';
+      return;
+    }
+
     box.innerHTML =
-      `<p class="cv ${v.verdict}">${escapeHtml(VERDICT_LABEL[v.verdict])}</p>` +
+      `<p class="cv ${v.verdict}">${label}${tag}</p>` +
       `<p>${escapeHtml(v.comment)}</p>` +
+      (compose.firstTry ? `<p class="first-try">첫 시도: ${escapeHtml(compose.firstTry)}</p>` : '') +
       (v.better && v.better.trim() !== sentence ? `<p class="better">→ ${escapeHtml(v.better)}</p>` : '');
     box.hidden = false;
 
-    const at = Date.now();
-    const d = new Date(at);
-    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    await db.put(db.STORES.SENTENCES, {
-      key: `${at}-${card.id}`,
-      at,
-      day,
-      cardId: card.id,
-      deck: card.deck,
-      expression: card.title || card.frontText,
-      sentence,
-      verdict: v.verdict,
-      comment: v.comment,
-      better: v.better,
-      pushed: 0,
-    });
+    await saveSentence(card, v, sentence);
+    compose = { stage: 'hint', firstTry: null, hint: null };
+    btn.textContent = '다시 판정';
   } catch (e) {
-    const box = $('compose-result');
     box.innerHTML = `<p class="cv wrong">${escapeHtml(e.message)}</p>`;
     box.hidden = false;
+    btn.textContent = compose.stage === 'full' && compose.firstTry ? '고쳐서 다시' : '다시 판정';
   } finally {
     btn.disabled = false;
-    btn.textContent = '다시 판정';
   }
 }
 

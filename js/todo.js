@@ -18,6 +18,8 @@ export const dateKey = (d) =>
 const at = (y, m, d) => new Date(y, m - 1, d).getTime();
 
 // 국면 경계 (시행일은 50회 공고 후 실측 교체)
+const OPIC_DAY = at(2026, 9, 4);     // OPIc 응시 14:20
+const OPIC_SCORE = at(2026, 9, 9);   // 성적 발표
 const P1_START = at(2026, 8, 31);   // W1 월요일
 const P2_START = at(2026, 11, 30);  // 버퍼주 시작
 const TOEIC_DAY = at(2026, 12, 13);
@@ -69,6 +71,49 @@ const P1_WEEKS = [
     satB: 'ICC(A) 13~14조 해부',
     sunB: '토익 실전 모의 ③ + 오답 카드화 1h' },
 ];
+
+/* ---------- 영어 발화 (4/3/2) ----------
+   영어학습 4-1절. 주제는 OPIc Background Survey 12개를 날짜로 돌린다 —
+   같은 주제를 반복하면 그 주제만 늘기 때문이다(Bygate 2001). */
+
+const SPEAK_TOPICS = [
+  '헬스 — 내 분할 프로그램과 왜 그렇게 짰는지',
+  '야구 — 응원하는 팀과 기억에 남는 경기',
+  '국내여행 — 10월 제주 계획',
+  '걷기·공원 — 언제 어디서 걷는지',
+  '영화·공연 — 최근 본 것과 왜 좋았는지',
+  '음악 감상 — 언제 무엇을 듣는지',
+  '카페 — 자주 가는 곳과 거기서 하는 일',
+  '집에서 보내는 휴가 — 쉬는 날의 하루',
+  '해변 — 가본 곳과 그때의 날씨·풍경',
+  '조깅 — 헬스와 어떻게 다른지',
+  'TV 시청 — 요즘 보는 것',
+  '쇼핑 — 어디서 무엇을 사는지',
+];
+
+export function speakTopic(now) {
+  const d = new Date(now);
+  const doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / DAY);
+  return SPEAK_TOPICS[doy % SPEAK_TOPICS.length];
+}
+
+// 녹음일은 주 2회(화·금). 나머지 날은 녹음 없이 말하기만 한다.
+const isRecordDay = (dow) => dow === 2 || dow === 5;
+
+// 전사·분석은 격주 토요일. P1 시작 기준 짝수 주에 돈다.
+const isTranscribeWeek = (now) => Math.floor((now - P1_START) / (7 * DAY)) % 2 === 0;
+
+function fourThreeTwo(now) {
+  const rec = isRecordDay(new Date(now).getDay());
+  return {
+    title: `영어 4/3/2 — ${speakTopic(now).split(' —')[0]}${rec ? ' (녹음)' : ''}`,
+    dur: '9분',
+    detail:
+      `오늘 주제: ${speakTopic(now)}. 왕복 도보에서 소리 내어 — 같은 내용을 4분 → 3분 → 2분으로 줄여 세 번 말한다. ` +
+      `내용을 바꾸지 말고 시간만 줄이는 것이 요점이다(내용을 새로 짜면 유창성 훈련이 아니라 작문이 된다). ` +
+      (rec ? '오늘은 폰 녹음만 켠다 — 전사·분석은 하지 않는다. 그건 토요일 몫이다.' : '녹음 없음. 끊겨도 멈추지 말고 채워서 간다 — 침묵이 실수보다 비싸다.'),
+  };
+}
 
 /* ---------- 과업 상세 (공통 프로토콜) ---------- */
 
@@ -140,6 +185,38 @@ const T = {
     detail:
       '작성 < 인출 시간 유지 — 카드 공장 금지. 앞면=질문, 뒷면=답. 조문은 질문화, 논점은 points 카드(목차 인출), 용어는 한↔영 양방향 2장, 회계는 개념·분개 원리만(계산은 카드로 안 된다). 새 영어 용어에는 내 예문 1개.',
   },
+  opic(now) {
+    const d = Math.ceil((OPIC_DAY - now) / DAY);
+    if (now >= OPIC_SCORE + DAY) return null;
+    if (now >= OPIC_DAY + DAY) {
+      return {
+        title: `OPIc 성적 발표 D-${Math.ceil((OPIC_SCORE - now) / DAY)} (9/9 13:00)`,
+        dur: '—',
+        detail: '발표되면 Underwriter/notes/지원기록.md의 어학란을 갱신하고, IM 이하면 25일 뒤 4단계로 재응시 접수. 재응시 전까지 4/3/2는 상설 밀도(주 5~6회 9분)로 돌아간다.',
+      };
+    }
+    return {
+      title: d <= 0 ? '⚡ 오늘 OPIc — 14:20 시청센터A (13:40 도착)' : `⚡ OPIc D-${d} — 9/4(금) 14:20 시청센터A`,
+      dur: d <= 0 ? '당일' : '—',
+      detail: d <= 0
+        ? '13:40 도착 기준. 오리엔테이션 20분 + 본시험 40분. 자가진단은 3단계(첫 응시는 진단이 목적). 서베이는 OPIc-2026-09.md 2절 그대로 입력. 침묵이 문법 실수보다 비싸다 — 막히면 답변 틀 표현으로 시간을 벌고 계속 말한다.'
+        : `남은 준비는 시간 박스 안에서만: 서베이 확정 → 유형별 답변 틀 → 8/30(일) 모의 1회 녹음. 매일 4/3/2로 서베이 주제를 돌리는 것이 사실상의 대비다. 덱은 영어/OPIc-주제 ▶ 로 따로 돈다.`,
+    };
+  },
+  errCards: {
+    title: '작문 오류 카드화 10분',
+    dur: '10분',
+    detail:
+      'srs/sentences/ 이번 달 파일을 열고 ⚠️·❌ 문장을 고른다 → 교정문을 srs/cards/영어-내오류.md 에 옮기고 **내가 틀린 자리에만** 형광펜(==) → 설명은 반드시 `> 해설:` 로(안 그러면 앞면에 답이 샌다). 주 5~10장. 밀렸으면 지난 주 것은 버리고 이번 주 것만 만든다 — 몰아서 만들면 카드 공장이다.',
+  },
+  transcribe() {
+    return {
+      title: '4/3/2 녹음 전사 → 오류 분석 → 카드',
+      dur: '25분',
+      detail:
+        `이번 주 녹음(화·금) 중 하나를 고른다. ① 재생하며 들리는 대로 받아 적는다(폰 받아쓰기 사용 가능 — 폰이 못 알아듣는 소리는 명료성 신호다) ② 관사·동사 형태·절 연결 세 가지만 표시한다(그 외는 지금 보지 않는다) ③ 고친 문장을 영어-내오류 덱으로. 격주다 — 안 하는 주는 학습 C를 그대로 쓴다.`,
+    };
+  },
   wfhRule: {
     title: '⚠ 재택일 규칙',
     dur: '—',
@@ -152,6 +229,7 @@ const T = {
 
 function commuteDay(now, phase) {
   const sections = [
+    { name: '오전 운동 왕복 05:50~06:50', tasks: [{ id: 'c0', ...fourThreeTwo(now) }] },
     { name: '출근길 07:20~08:30 (70분)', tasks: [{ id: 'c1', ...T.srsAm }, { id: 'c2', ...T.audio(now) }] },
     { name: '점심', tasks: [{ id: 'c3', ...T.lunch }] },
     { name: '퇴근길 17:00~18:20 (80분) → 헬스장', tasks: [{ id: 'c4', ...T.recon }, { id: 'c5', ...T.srsPm }] },
@@ -198,7 +276,10 @@ function saturday(now, week, phase) {
           ? '1차 기출 실전 모의: 한 회차 3과목 클로즈드북 → 즉시 채점 → 오답 전량 카드화'
           : '2차 실전 답안 2문항 (3과목 로테이션, 실제 시간 측정, 직후 채점)');
   return [
-    { name: '오전', tasks: [{ id: 's0', title: '컨디셔닝 09:00~11:00', dur: '2h', detail: '운동계획 참조. 고정 — 학습이 침식하지 않는다.' }] },
+    { name: '오전', tasks: [
+      { id: 's0', title: '컨디셔닝 09:00~11:00', dur: '2h', detail: '운동계획 참조. 고정 — 학습이 침식하지 않는다.' },
+      { id: 's0b', ...fourThreeTwo(now) },
+    ] },
     {
       name: '학습 A 11:30~13:00',
       tasks: [{
@@ -213,7 +294,10 @@ function saturday(now, week, phase) {
     { name: '학습 B 14:00~17:00 — 산출 전용', tasks: [{ id: 's2', title: satB.split(':')[0].slice(0, 30), dur: '3h', detail: satB }] },
     {
       name: '학습 C 19:30~21:00',
-      tasks: [{ id: 's3', title: '가벼운 것', dur: '1.5h', detail: '오늘 오답 카드화 → 밀린 인강 차시 배속 소화 → 이번 주 카드 품질 점검(질문이 인출을 강제하는가). 피곤하면 여기부터 버린다.' }],
+      tasks: [
+        { id: 's3', title: '가벼운 것', dur: '1.5h', detail: '오늘 오답 카드화 → 밀린 인강 차시 배속 소화 → 이번 주 카드 품질 점검(질문이 인출을 강제하는가). 피곤하면 여기부터 버린다.' },
+        ...(isTranscribeWeek(now) ? [{ id: 's5', ...T.transcribe() }] : []),
+      ],
     },
     { name: '취침 전', tasks: [{ id: 's4', ...T.night }] },
   ];
@@ -240,6 +324,7 @@ function sunday(now, week, phase) {
       name: '마감',
       tasks: [
         { id: 'n4', title: '지원 파이프라인 30분', dur: '30분', detail: '채용공고 스캔 → Underwriter/notes/지원기록.md 갱신 → 이번 주 지원 1건 진행 여부 결정. 합격 전 지원 병행 원칙 — 중단 없음.' },
+        { id: 'n4b', ...T.errCards },
         { id: 'n5', title: '주간 정리 30분', dur: '30분', detail: 'SRS 통계 확인(성숙 카드 비율) → 용어집 이관 → 저장소 커밋 → 다음 주 To-Do 확인. 계획 수정은 지금만 허용된다 — 주중에 계획을 만지작거리지 않는다.' },
       ],
     },
@@ -256,10 +341,14 @@ function prepDay(now) {
         { id: 'q2', title: '해상 1안(44차시) — 결제는 9월 중', dur: '—', detail: '지금은 수강기간 조건만 확인. 첫 4주는 상법 해상편 원문으로 시작하므로 급하지 않다.' },
         { id: 'q3', title: '재물특종은 지금 사지 않는다', dur: '—', detail: '착수가 12/15 — 수강기간이 결제일 기산이면 미리 사는 만큼 손해. 11월 말 결제. 그때 2027 개정판이 나와 있으면 그쪽.' },
         { id: 'q4', title: '설정에서 재택 요일 지정', dur: '1분', detail: '아래 설정 → To-Do → 재택(대기) 요일. 이 탭의 하루 구성이 그 요일 기준으로 바뀐다.' },
+        { id: 'q0', title: 'OPIc 서베이 확정 + 영어/OPIc-주제 덱 시작', dur: '1h', detail: 'OPIc-2026-09.md 2절의 12개 항목을 그대로 확정해 적어둔다(당일 그대로 입력). 그리고 SRS에서 영어/OPIc-주제 덱을 ▶ 로 돌려 1절 답변 틀 10장부터 — 막혔을 때 시간 버는 표현이 등급을 만든다.' },
         { id: 'q5', title: '토익 진단 모의 1회분 준비', dur: '—', detail: '9/6(일) 학습 B에서 시간 재고 푼다. 기출 모의 1회분이면 충분 — 문제집 사재기 금지.' },
       ],
     },
-    { name: '오늘부터 이미 도는 것 (통근 창)', tasks: [{ id: 'q6', ...T.srsAm }, { id: 'q7', ...T.recon }, { id: 'q8', ...T.night }] },
+    { name: '오늘부터 이미 도는 것', tasks: [
+      { id: 'q9', ...fourThreeTwo(now.getTime ? now.getTime() : now) },
+      { id: 'q6', ...T.srsAm }, { id: 'q7', ...T.recon }, { id: 'q8', ...T.night },
+    ] },
   ];
 }
 
@@ -327,6 +416,10 @@ export function planFor(date, wfhDow = 4) {
     dayType = '출근일 (폰 온리)';
     sections = commuteDay(now, phase);
   }
+
+  // OPIc(9/4)은 어느 요일 유형이든 최상단에 뜬다. 성적 발표(9/9) 뒤 사라진다.
+  const opic = T.opic(now);
+  if (opic) sections = [{ name: '⚡ 관문 — OPIc', tasks: [{ id: 'opic', ...opic }] }, ...sections];
 
   const weekLine = week
     ? `이번 주: ${week.acc} · ${week.marLect} · 원문 ${week.marRead.split('—')[0].trim()}`

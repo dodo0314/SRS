@@ -10,28 +10,64 @@ export const GEMINI_MODEL = 'gemini-3.6-flash';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
+// 오류 유형. 집계해서 카드 표적을 정하는 데 쓴다 — 영어학습 2-1절.
+export const ERROR_TYPES = ['article', 'agreement', 'clause', 'preposition', 'collocation', 'word-choice', 'spelling', 'none', 'other'];
+
+export const ERROR_LABEL = {
+  article: '관사', agreement: '동사 형태·수일치', clause: '절 연결', preposition: '전치사',
+  collocation: '연어·병렬', 'word-choice': '어휘 선택', spelling: '철자', none: '—', other: '기타',
+};
+
 // 구조화 출력 스키마. 응답이 이 형태의 JSON임을 API가 보장한다.
+// 2단계로 나뉜다: 1단(hint)은 정답을 주지 않고 어디가 틀렸는지만 짚는다.
+// Lyster & Saito(2010) 메타분석 — 정답을 되돌려주는 recast보다 스스로 고치게 하는 prompt가 우월하다.
 const VERDICT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['verdict', 'comment', 'better'],
+  required: ['verdict', 'errorType', 'comment', 'better'],
   properties: {
     verdict: { type: 'string', enum: ['natural', 'minor', 'wrong'] },
+    errorType: { type: 'string', enum: ERROR_TYPES },
     comment: { type: 'string' },
     better: { type: 'string' },
+  },
+};
+
+const HINT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['verdict', 'errorType', 'hint'],
+  properties: {
+    verdict: { type: 'string', enum: ['natural', 'minor', 'wrong'] },
+    errorType: { type: 'string', enum: ERROR_TYPES },
+    hint: { type: 'string' },
   },
 };
 
 // Gemini 구조화 출력 스키마. OpenAPI 형식이라 타입 이름이 대문자다.
 const GEMINI_SCHEMA = {
   type: 'OBJECT',
-  required: ['verdict', 'comment', 'better'],
+  required: ['verdict', 'errorType', 'comment', 'better'],
   properties: {
     verdict: { type: 'STRING', enum: ['natural', 'minor', 'wrong'] },
+    errorType: { type: 'STRING', enum: ERROR_TYPES },
     comment: { type: 'STRING' },
     better: { type: 'STRING' },
   },
 };
+
+const GEMINI_HINT_SCHEMA = {
+  type: 'OBJECT',
+  required: ['verdict', 'errorType', 'hint'],
+  properties: {
+    verdict: { type: 'STRING', enum: ['natural', 'minor', 'wrong'] },
+    errorType: { type: 'STRING', enum: ERROR_TYPES },
+    hint: { type: 'STRING' },
+  },
+};
+
+const schemaFor = (stage, gemini) =>
+  stage === 'hint' ? (gemini ? GEMINI_HINT_SCHEMA : HINT_SCHEMA) : (gemini ? GEMINI_SCHEMA : VERDICT_SCHEMA);
 
 export const VERDICT_LABEL = {
   natural: '✅ 자연스럽다',
@@ -47,25 +83,57 @@ export function stripHtml(html) {
     .trim();
 }
 
-export function buildPrompt(card, sentence) {
+export function buildPrompt(card, sentence, { stage = 'full', firstTry = null, hint = null } = {}) {
   const expression = card.title || card.frontText || '';
   const meaning = stripHtml(card.back);
-  return [
+  const head = [
     '당신은 한국인 학습자의 영어 작문을 교정하는 코치다.',
     '',
     `학습 항목: ${expression}`,
     meaning ? `항목 설명(카드 뒷면): ${meaning}` : null,
-    `학습자가 이 항목을 써서 만든 문장: ${sentence}`,
+    firstTry ? `학습자의 첫 시도: ${firstTry}` : null,
+    hint ? `그때 준 힌트: ${hint}` : null,
+    `${firstTry ? '고쳐 쓴 문장' : '학습자가 이 항목을 써서 만든 문장'}: ${sentence}`,
     '',
     '판정 기준:',
     '- natural: 문법이 맞고, 학습 항목을 올바른 뜻으로 썼으며, 원어민에게 자연스럽다',
     '- minor: 뜻은 통하지만 관사·시제·어순·연어 등 다듬을 점이 있다',
     '- wrong: 문법이 틀렸거나, 학습 항목을 안 썼거나 잘못된 뜻으로 썼다',
     '',
-    'comment는 한국어 한두 문장으로 쓴다. 덕담 없이 구체적으로 지적하되, 학습 항목을 제대로 썼는지부터 짚는다.',
-    'better에는 같은 뜻을 자연스럽게 다듬은 문장을 쓴다. natural이면 원문을 그대로 둔다.',
-    '다듬은 문장에서도 학습 항목은 반드시 유지한다. 이 카드의 목적이 그 항목을 연습하는 것이므로, 항목 자체가 오용이 아닌 한 더 자연스러운 다른 표현으로 갈아치우지 않는다. 항목이 문법 패턴이면 그 패턴을 유지한다.',
-  ].filter((l) => l !== null).join('\n');
+    'errorType은 가장 두드러진 오류 하나를 고른다:',
+    'article(관사 a/an/the) · agreement(동사 형태·수일치) · clause(절 연결·문장 조각·comma splice) ·',
+    'preposition(전치사) · collocation(연어·병렬) · word-choice(어휘 선택) · spelling(철자) · other.',
+    'natural이면 none.',
+    '',
+  ];
+
+  const tail = stage === 'hint'
+    ? [
+        '**이 단계에서는 정답 문장을 절대 알려주지 않는다.**',
+        'hint에는 한국어 한두 문장으로 "어디가" 잘못됐는지만 짚는다 — 학습자가 스스로 고칠 수 있을 만큼만.',
+        '예: "두 번째 절의 명사 앞에 빠진 것이 있다", "동사 형태가 주어와 맞지 않는다".',
+        '고쳐 쓴 영어 표현이나 정답 단어를 hint에 넣지 않는다. 위치와 종류만 말한다.',
+        'natural이면 hint에 무엇이 좋았는지 한 문장으로 적는다.',
+      ]
+    : [
+        'comment는 한국어 한두 문장으로 쓴다. 덕담 없이 구체적으로 지적하되, 학습 항목을 제대로 썼는지부터 짚는다.',
+        'better에는 같은 뜻을 자연스럽게 다듬은 문장을 쓴다. natural이면 원문을 그대로 둔다.',
+        '다듬은 문장에서도 학습 항목은 반드시 유지한다. 이 카드의 목적이 그 항목을 연습하는 것이므로, 항목 자체가 오용이 아닌 한 더 자연스러운 다른 표현으로 갈아치우지 않는다. 항목이 문법 패턴이면 그 패턴을 유지한다.',
+      ];
+
+  return [...head, ...tail].filter((l) => l !== null).join('\n');
+}
+
+/** 두 단계(hint/full)의 응답을 한 모양으로 맞춘다. hint 단계에는 better가 없다. */
+function normalizeVerdict(json) {
+  const type = ERROR_TYPES.includes(json.errorType) ? json.errorType : (json.verdict === 'natural' ? 'none' : 'other');
+  return {
+    verdict: json.verdict,
+    errorType: type,
+    comment: String(json.comment || json.hint || ''),
+    hint: String(json.hint || ''),
+    better: String(json.better || ''),
+  };
 }
 
 /** 응답 본문에서 판정 JSON을 꺼낸다. 형태가 어긋나면 사람이 읽을 오류를 던진다. */
@@ -86,7 +154,7 @@ export function readVerdict(body) {
   if (!VERDICT_LABEL[json.verdict]) {
     throw new Error('판정 응답이 예상한 형태가 아니다.');
   }
-  return { verdict: json.verdict, comment: String(json.comment || ''), better: String(json.better || '') };
+  return normalizeVerdict(json);
 }
 
 function messageFor(status, body) {
@@ -102,12 +170,13 @@ function messageFor(status, body) {
  * 문장 하나를 판정받는다. provider에 따라 Claude 또는 Gemini를 호출한다.
  * @returns {Promise<{verdict: string, comment: string, better: string}>}
  */
-export async function judgeSentence({ provider = 'anthropic', apiKey, card, sentence, fetchFn = fetch }) {
-  if (provider === 'gemini') return judgeGemini({ apiKey, card, sentence, fetchFn });
-  return judgeAnthropic({ apiKey, card, sentence, fetchFn });
+export async function judgeSentence({ provider = 'anthropic', apiKey, card, sentence, fetchFn = fetch, stage = 'full', firstTry = null, hint = null }) {
+  const opts = { apiKey, card, sentence, fetchFn, stage, firstTry, hint };
+  if (provider === 'gemini') return judgeGemini(opts);
+  return judgeAnthropic(opts);
 }
 
-async function judgeAnthropic({ apiKey, card, sentence, fetchFn, model = COACH_MODEL }) {
+async function judgeAnthropic({ apiKey, card, sentence, fetchFn, stage = 'full', firstTry = null, hint = null, model = COACH_MODEL }) {
   const res = await fetchFn(API_URL, {
     method: 'POST',
     headers: {
@@ -121,8 +190,8 @@ async function judgeAnthropic({ apiKey, card, sentence, fetchFn, model = COACH_M
       model,
       max_tokens: 1024,
       // 짧은 교정 판정이라 effort는 낮춘다. 형식은 스키마로 강제한다.
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: VERDICT_SCHEMA } },
-      messages: [{ role: 'user', content: buildPrompt(card, sentence) }],
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: schemaFor(stage, false) } },
+      messages: [{ role: 'user', content: buildPrompt(card, sentence, { stage, firstTry, hint }) }],
     }),
   });
   const body = await res.json().catch(() => null);
@@ -149,7 +218,7 @@ export function readGeminiVerdict(body) {
   if (!VERDICT_LABEL[json.verdict]) {
     throw new Error('판정 응답이 예상한 형태가 아니다.');
   }
-  return { verdict: json.verdict, comment: String(json.comment || ''), better: String(json.better || '') };
+  return normalizeVerdict(json);
 }
 
 function geminiMessageFor(status, body) {
@@ -161,10 +230,10 @@ function geminiMessageFor(status, body) {
   return apiMsg ? `판정 실패: ${apiMsg}` : `판정 실패 (${status})`;
 }
 
-async function judgeGemini({ apiKey, card, sentence, fetchFn, noThinkingConfig = false }) {
+async function judgeGemini({ apiKey, card, sentence, fetchFn, stage = 'full', firstTry = null, hint = null, noThinkingConfig = false }) {
   const generationConfig = {
     responseMimeType: 'application/json',
-    responseSchema: GEMINI_SCHEMA,
+    responseSchema: schemaFor(stage, true),
   };
   // 짧은 판정에 깊은 사고는 낭비다. 3.x부터는 thinkingLevel 문자열을 쓴다.
   if (!noThinkingConfig) generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
@@ -176,7 +245,7 @@ async function judgeGemini({ apiKey, card, sentence, fetchFn, noThinkingConfig =
       'x-goog-api-key': apiKey,
     },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: buildPrompt(card, sentence) }] }],
+      contents: [{ role: 'user', parts: [{ text: buildPrompt(card, sentence, { stage, firstTry, hint }) }] }],
       generationConfig,
     }),
   });
@@ -185,7 +254,7 @@ async function judgeGemini({ apiKey, card, sentence, fetchFn, noThinkingConfig =
     // 모델 세대가 바뀌면 thinkingConfig 형식이 거부될 수 있는데, 오류 문구가
     // 구체적이지 않은 경우가 많다. 400이면 설정을 빼고 한 번 재시도한다.
     if (res.status === 400 && !noThinkingConfig) {
-      return judgeGemini({ apiKey, card, sentence, fetchFn, noThinkingConfig: true });
+      return judgeGemini({ apiKey, card, sentence, fetchFn, stage, firstTry, hint, noThinkingConfig: true });
     }
     throw new Error(geminiMessageFor(res.status, body));
   }
@@ -196,8 +265,15 @@ async function judgeGemini({ apiKey, card, sentence, fetchFn, noThinkingConfig =
 
 export function formatEntry(e) {
   const icon = { natural: '✅', minor: '⚠️', wrong: '❌' }[e.verdict] || '❓';
-  const lines = [`- **${e.expression}** — ${e.sentence}`, `  - ${icon} ${e.comment}`];
-  if (e.better && e.better.trim() && e.better.trim() !== e.sentence.trim()) {
+  const tag = e.errorType && e.errorType !== 'none' ? ` \`${ERROR_LABEL[e.errorType] || e.errorType}\`` : '';
+  const lines = [`- **${e.expression}**${tag} — ${e.sentence}`];
+  // 첫 시도가 따로 있으면 힌트를 받고 스스로 고친 것이다 — 그 흐름이 기록의 핵심이다.
+  if (e.firstTry && e.firstTry.trim() && e.firstTry.trim() !== String(e.sentence || '').trim()) {
+    lines.push(`  - 첫 시도: ${e.firstTry}`);
+    if (e.hint && e.hint.trim()) lines.push(`  - 힌트: ${e.hint}`);
+  }
+  lines.push(`  - ${icon} ${e.comment}`);
+  if (e.better && e.better.trim() && e.better.trim() !== String(e.sentence || '').trim()) {
     lines.push(`  - 다듬기: ${e.better}`);
   }
   return lines.join('\n');

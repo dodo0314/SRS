@@ -303,6 +303,12 @@ a { color: var(--accent); }
 .compose-result .cv.wrong { color: var(--again); }
 .compose-result p { margin: 0 0 6px; }
 .compose-result .better { color: var(--accent); }
+.compose-result .first-try { color: var(--muted); text-decoration: line-through; }
+.compose-result .etag {
+  font-size: 12px; font-weight: 600; padding: 1px 7px; margin-left: 6px;
+  border-radius: 10px; background: var(--surface-2, rgba(127,127,127,.16)); color: var(--muted);
+  vertical-align: middle;
+}
 
 .source { margin-top: 20px; font-size: 14px; }
 .source a, .source span { color: var(--muted); }
