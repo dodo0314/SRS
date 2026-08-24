@@ -432,12 +432,90 @@ a { color: var(--accent); }
   .grade { min-height: 52px; }
 }
 
-/* ---------- 상단 탭 (SRS / To-Do) ---------- */
+/* ---------- 홈 허브 ---------- */
+.hub-tiles { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+.hub-tile {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 15px 14px; color: var(--text); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.hub-tile:active { background: var(--surface-2); }
+.ht-ico { font-size: 22px; flex: none; }
+.ht-body { flex: 1; min-width: 0; }
+.ht-body b { display: block; font-size: 16px; font-weight: 700; }
+.ht-sub { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+.ht-arrow { color: var(--muted); font-size: 20px; flex: none; }
+
+/* ---------- 정보 배너 (D-day 하나 + 접힌 나머지) ---------- */
+.course-banner {
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--warn);
+  border-radius: var(--radius); padding: 10px 12px; margin-bottom: 14px; font-size: 14px;
+}
+.bn-row { display: flex; align-items: flex-start; gap: 8px; }
+.bn-row .bn-item { flex: 1; min-width: 0; }
+.bn-item summary {
+  list-style: none; cursor: pointer; font-weight: 650; line-height: 1.45;
+}
+.bn-item summary::-webkit-details-marker { display: none; }
+.bn-item p { margin: 6px 0 2px; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+.bn-more {
+  flex: none; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted);
+  font: inherit; font-size: 12.5px; font-weight: 700; padding: 2px 10px; border-radius: 999px;
+  cursor: pointer; touch-action: manipulation;
+}
+.bn-rest .bn-item { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+
+/* ---------- 코스 카드 (Course 첫 화면) ---------- */
+.course-card {
+  display: block; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px; margin-bottom: 10px; color: var(--text); font: inherit; cursor: pointer;
+  touch-action: manipulation;
+}
+.course-card:active { background: var(--surface-2); }
+.cc-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cc-ico { font-size: 20px; }
+.cc-top b { flex: 1; font-size: 16.5px; }
+.cc-badge { font-size: 13px; color: var(--muted); }
+.cc-sub { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 8px; font-variant-numeric: tabular-nums; }
+
+.cbar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.cbar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .25s ease; }
+
+/* ---------- 코스 러너 ---------- */
+.run-head { margin-bottom: 14px; }
+.run-day { font-size: 13.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+.run-meter { display: flex; align-items: center; gap: 10px; }
+.run-meter .cbar { flex: 1; }
+.run-meter span { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.run-badges { margin-top: 8px; font-size: 13.5px; color: var(--muted); }
+.run-badges b { color: var(--text); }
+
+.station.now { border-color: var(--accent); }
+.station.now .todo-title { color: var(--accent); }
+
+.course-done { text-align: center; padding: 26px 0 10px; }
+.cd-big { font-size: 44px; line-height: 1; }
+.cd-title { font-size: 19px; font-weight: 700; margin: 12px 0 4px; }
+
+/* ---------- 실험실 ---------- */
+.lab-tools { display: flex; flex-direction: column; gap: 10px; }
+.lab-tool {
+  display: block; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 15px 14px; color: var(--text); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.lab-tool:active { background: var(--surface-2); }
+.lab-tool b { display: block; font-size: 16px; }
+.lab-tool span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+/* ---------- 상단 탭 (홈 / SRS / Course / 실험실) ---------- */
 .top-tabs { display: flex; gap: 8px; margin: 4px 0 18px; }
 .ttab {
   flex: 1; padding: 10px 0; border-radius: 999px;
   border: 1px solid var(--line); background: var(--surface);
-  color: var(--muted); font-size: 15px; font-weight: 700; cursor: pointer;
+  color: var(--muted); font-size: 14px; font-weight: 700; cursor: pointer;
+  white-space: nowrap; touch-action: manipulation;
 }
 .ttab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 

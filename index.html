@@ -35,7 +35,79 @@
   </div>
 </section>
 
-<!-- 홈 -->
+<!-- 홈 허브 — 하루의 문. 결심은 여기서 한 번만 쓴다 -->
+<section id="view-hub" class="view" hidden>
+  <header class="bar">
+    <h1 id="hub-title">오늘</h1>
+    <div class="bar-actions">
+      <button id="btn-sync-hub" class="icon-btn" title="동기화" aria-label="동기화">⟳</button>
+      <button class="icon-btn" data-go="settings" title="설정" aria-label="설정">⚙</button>
+    </div>
+  </header>
+  <div class="wrap">
+    <div id="hub-banner"></div>
+    <button id="hub-cta" class="btn primary block big">오늘 코스 시작</button>
+    <p id="hub-cta-sub" class="status"></p>
+    <div id="hub-tiles" class="hub-tiles"></div>
+    <p id="hub-sync" class="status foot"></p>
+  </div>
+</section>
+
+<!-- Course — 영어 / UW -->
+<section id="view-course" class="view" hidden>
+  <header class="bar">
+    <h1>Course</h1>
+    <div class="bar-actions">
+      <button class="icon-btn" data-go="settings" title="설정" aria-label="설정">⚙</button>
+    </div>
+  </header>
+  <div class="wrap">
+    <nav class="top-tabs">
+      <button class="ttab" data-ttab="hub">홈</button>
+      <button class="ttab" data-ttab="srs">SRS</button>
+      <button class="ttab active" data-ttab="course">Course</button>
+      <button class="ttab" data-ttab="lab">실험실</button>
+    </nav>
+    <div id="course-root"></div>
+  </div>
+</section>
+
+<!-- 코스 러너 -->
+<section id="view-course-run" class="view" hidden>
+  <header class="bar">
+    <button id="btn-course-back" class="icon-btn" aria-label="뒤로">‹</button>
+    <h1 id="course-run-title">코스</h1>
+    <span class="icon-btn ghost"></span>
+  </header>
+  <div class="wrap">
+    <div id="course-run-root"></div>
+  </div>
+</section>
+
+<!-- 실험실 — 코스도 SRS도 아닌 도구들 -->
+<section id="view-lab" class="view" hidden>
+  <header class="bar">
+    <h1>실험실</h1>
+    <div class="bar-actions">
+      <button class="icon-btn" data-go="settings" title="설정" aria-label="설정">⚙</button>
+    </div>
+  </header>
+  <div class="wrap">
+    <nav class="top-tabs">
+      <button class="ttab" data-ttab="hub">홈</button>
+      <button class="ttab" data-ttab="srs">SRS</button>
+      <button class="ttab" data-ttab="course">Course</button>
+      <button class="ttab active" data-ttab="lab">실험실</button>
+    </nav>
+    <div class="lab-tools">
+      <button class="lab-tool" data-lab="dissect"><b>약관해부</b><span>L0-A 약관 구조 해부 훈련</span></button>
+      <button class="lab-tool" data-lab="todo"><b>하루설계</b><span>요일별 시간표 원본 — 코스가 이걸 재료로 쓴다</span></button>
+    </div>
+    <p class="status foot">도구는 계속 추가된다.</p>
+  </div>
+</section>
+
+<!-- SRS 홈 -->
 <section id="view-home" class="view" hidden>
   <header class="bar">
     <h1 id="home-title">오늘</h1>
@@ -46,9 +118,10 @@
   </header>
   <div class="wrap">
     <nav class="top-tabs">
+      <button class="ttab" data-ttab="hub">홈</button>
       <button class="ttab active" data-ttab="srs">SRS</button>
-      <button class="ttab" data-ttab="todo">To-Do</button>
-      <button class="ttab" data-ttab="dissect">해부</button>
+      <button class="ttab" data-ttab="course">Course</button>
+      <button class="ttab" data-ttab="lab">실험실</button>
     </nav>
     <div class="today">
       <div class="today-num"><strong id="home-due">0</strong><span>복습</span></div>
@@ -75,38 +148,30 @@
   </div>
 </section>
 
-<!-- To-Do -->
+<!-- 하루설계 (실험실 > 시간표 원본) -->
 <section id="view-todo" class="view" hidden>
   <header class="bar">
-    <h1 id="todo-title">오늘</h1>
+    <button class="icon-btn" data-go="lab" aria-label="뒤로">‹</button>
+    <h1 id="todo-title">하루설계</h1>
     <div class="bar-actions">
       <button class="icon-btn" data-go="settings" title="설정" aria-label="설정">⚙</button>
     </div>
   </header>
   <div class="wrap">
-    <nav class="top-tabs">
-      <button class="ttab" data-ttab="srs">SRS</button>
-      <button class="ttab active" data-ttab="todo">To-Do</button>
-      <button class="ttab" data-ttab="dissect">해부</button>
-    </nav>
     <div id="todo-list"></div>
   </div>
 </section>
 
-<!-- 해부 (L0-A 약관 구조 해부) -->
+<!-- 해부 (실험실 > L0-A 약관 구조 해부) -->
 <section id="view-dissect" class="view" hidden>
   <header class="bar">
+    <button class="icon-btn" data-go="lab" aria-label="뒤로">‹</button>
     <h1>해부</h1>
     <div class="bar-actions">
       <button class="icon-btn" data-go="settings" title="설정" aria-label="설정">⚙</button>
     </div>
   </header>
   <div class="wrap">
-    <nav class="top-tabs">
-      <button class="ttab" data-ttab="srs">SRS</button>
-      <button class="ttab" data-ttab="todo">To-Do</button>
-      <button class="ttab active" data-ttab="dissect">해부</button>
-    </nav>
     <div id="dissect-root"></div>
   </div>
 </section>
@@ -181,7 +246,7 @@
 <!-- 설정 -->
 <section id="view-settings" class="view" hidden>
   <header class="bar">
-    <button class="icon-btn" data-go="home" aria-label="뒤로">‹</button>
+    <button class="icon-btn" data-go="hub" aria-label="뒤로">‹</button>
     <h1>설정</h1>
     <span class="icon-btn ghost"></span>
   </header>
@@ -199,14 +264,14 @@
     </div>
     <p id="se-status" class="status"></p>
 
-    <h2 class="section-title">To-Do</h2>
+    <h2 class="section-title">코스 · 하루설계</h2>
     <div class="field">
       <label for="se-wfh">재택(대기) 요일</label>
       <select id="se-wfh">
         <option value="1">월</option><option value="2">화</option><option value="3">수</option>
         <option value="4">목</option><option value="5">금</option><option value="-1">없음 (전일 출근)</option>
       </select>
-      <p class="hint">To-Do 탭의 하루 구성이 이 요일 기준으로 바뀐다. 바꾸면 바로 저장된다.</p>
+      <p class="hint">UW 코스와 하루설계의 하루 구성이 이 요일 기준으로 바뀐다. 바꾸면 바로 저장된다.</p>
     </div>
 
     <h2 class="section-title">학습량</h2>
@@ -232,6 +297,11 @@
 
     <h2 class="section-title">카드 파일 문제</h2>
     <div id="se-errors" class="warnbox">아직 확인하지 않았다.</div>
+
+    <h2 class="section-title">앱 갱신</h2>
+    <p class="hint">배포했는데 아래 버전이 안 올라갔으면 여기를 누른다 — 캐시(폰·CDN)를 우회해 앱 파일을 다시 받고 새로고침한다. 학습 기록은 건드리지 않는다.</p>
+    <button id="btn-refresh-app" class="btn primary block">지금 갱신</button>
+    <p id="refresh-status" class="status"></p>
 
     <h2 class="section-title">데이터</h2>
     <p id="se-usage" class="status"></p>

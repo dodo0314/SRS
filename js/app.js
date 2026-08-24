@@ -12,11 +12,12 @@ import {
 import { renderTodo } from './todo.js';
 import { renderDissect } from './dissect.js';
 import { judgeSentence, VERDICT_LABEL, ERROR_LABEL } from './coach.js';
+import { COURSES, BADGE, refreshToday, renderCourseHub, renderCourseRun, bannerHtml, wireBanner } from './course.js';
 
 const TOKEN_KEY = 'srs.token';
 const ANTHROPIC_KEY = 'srs.anthropicKey';
 const GEMINI_KEY = 'srs.geminiKey';
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
@@ -37,6 +38,8 @@ const state = {
   recalled: new Set(),
   undoStack: [],
   syncing: false,
+  sessionOrigin: null, // 코스에서 카드 정거장으로 들어왔으면 코스 id — 끝나면 그 코스로 돌아간다
+  courseView: 'en',
 };
 
 /* ---------- 공통 ---------- */
@@ -131,6 +134,107 @@ function todayLabel() {
 function renderTodoView() {
   $('todo-title').textContent = todayLabel();
   renderTodo($('todo-list'), new Date(), state.todo.wfhDow);
+}
+
+/* ---------- 홈 허브와 코스 ---------- */
+
+/** 최상위 덱을 영어/보험(그 외 전부)으로 가른다 — 코스의 카드 정거장 범위. */
+function deckTops() {
+  const tops = [...new Set(state.cards.map((c) => c.deck.split('/')[0]))];
+  const en = tops.filter((t) => t === '영어' || t.startsWith('영어'));
+  return { en, uw: tops.filter((t) => !en.includes(t)) };
+}
+
+/** course.js에 넘기는 문맥 — 카드 큐는 SRS와 완전히 같은 계산을 쓴다. */
+function courseCtx() {
+  return {
+    wfhDow: state.todo.wfhDow,
+    deckTops: deckTops(),
+    cardCounts: (decks) => todayCounts(decks).counts,
+    startCards: (decks, courseId) => startSession(decks, courseId),
+    openRun: (courseId) => showCourseRun(courseId),
+  };
+}
+
+async function showCourseRun(courseId) {
+  state.courseView = courseId;
+  $('course-run-title').textContent = COURSES[courseId].name;
+  await renderCourseRun($('course-run-root'), courseId, new Date(), courseCtx());
+  show('course-run');
+}
+
+async function renderCourseView() {
+  await renderCourseHub($('course-root'), new Date(), courseCtx());
+}
+
+async function renderHub() {
+  $('hub-title').textContent = todayLabel();
+  const ctx = courseCtx();
+  const date = new Date();
+  const en = await refreshToday('en', date, ctx);
+  const uw = await refreshToday('uw', date, ctx);
+  const { counts } = todayCounts([]);
+
+  const bn = $('hub-banner');
+  bn.innerHTML = bannerHtml(en.banner);
+  wireBanner(bn);
+
+  // 결심은 한 번 — CTA는 진행 중인 코스를 먼저, 없으면 영어부터 가리킨다
+  const open = ['en', 'uw'].filter((id) => ({ en, uw })[id].status !== 'full');
+  const target = open.find((id) => ({ en, uw })[id].doneN > 0) || open[0] || null;
+  const cta = $('hub-cta');
+  if (!target) {
+    cta.textContent = '🔥 오늘 완주 — 내일 또 봐!';
+    cta.disabled = true;
+    cta.onclick = null;
+    $('hub-cta-sub').textContent = `영어 연속달성 ${en.streak}일 · UW 연속달성 ${uw.streak}일`;
+  } else {
+    const o = { en, uw }[target];
+    cta.textContent = `${COURSES[target].icon} ${COURSES[target].name} ${o.doneN ? '이어하기' : '시작'} — ${o.doneN}/${o.total}`;
+    cta.disabled = false;
+    $('hub-cta-sub').textContent =
+      o.status === 'min' ? '🕯️ 최소달성은 확보 — 남은 건 보너스다.' : '';
+    cta.onclick = () => showCourseRun(target);
+  }
+
+  $('hub-tiles').innerHTML = [
+    { go: 'srs', ico: '🗂️', name: 'SRS', sub: `복습 ${counts.due} · 신규 ${counts.new} — 카드 자유 이용` },
+    { go: 'course', ico: '🧭', name: 'Course', sub: `영어 ${en.doneN}/${en.total} ${BADGE[en.status]} · UW ${uw.doneN}/${uw.total} ${BADGE[uw.status]}` },
+    { go: 'lab', ico: '🧪', name: '실험실', sub: '약관해부 · 하루설계' },
+  ]
+    .map(
+      (t) => `<button class="hub-tile" data-hub-go="${t.go}">
+        <span class="ht-ico">${t.ico}</span>
+        <span class="ht-body"><b>${t.name}</b><span class="ht-sub">${escapeHtml(t.sub)}</span></span>
+        <span class="ht-arrow">›</span>
+      </button>`
+    )
+    .join('');
+  els('[data-hub-go]', $('hub-tiles')).forEach((btn) =>
+    btn.addEventListener('click', () => goTab(btn.dataset.hubGo))
+  );
+
+  db.getSetting('lastPush').then((ts) =>
+    db.getSetting('lastCardPull').then((pull) => {
+      $('hub-sync').textContent = `카드 ${state.cards.length}장 · 마지막 동기화 ${relTime(Math.max(ts || 0, pull || 0))}`;
+    })
+  );
+}
+
+/** 상단 탭과 허브 타일이 공유하는 화면 전환. */
+function goTab(t) {
+  if (t === 'hub') {
+    renderHub();
+    show('hub');
+  } else if (t === 'course') {
+    renderCourseView();
+    show('course');
+  } else if (t === 'lab') {
+    show('lab');
+  } else {
+    renderHome();
+    show('home');
+  }
 }
 
 async function loadData() {
@@ -272,7 +376,8 @@ async function renderWarnings() {
 /* ---------- 복습 ---------- */
 
 /** decks를 주면 그 덱만으로 세션을 만든다. 없으면 홈의 선택 상태를 따른다. */
-function startSession(decks) {
+function startSession(decks, origin = null) {
+  state.sessionOrigin = origin;
   const scope = Array.isArray(decks) && decks.length ? decks : state.selectedDecks;
   const { items, counts } = todayCounts(scope);
   if (!items.length) {
@@ -557,6 +662,7 @@ async function finishSession() {
   $('done-summary').textContent = `${answered}장 · ${minutes}분`;
   state.session = null;
   state.current = null;
+  $('btn-done-home').textContent = state.sessionOrigin ? '코스로 돌아가기' : '홈으로';
   show('done');
   if (navigator.onLine) {
     pushQuietly();
@@ -739,6 +845,59 @@ async function importData(file) {
   }
 }
 
+/* ---------- 앱 갱신 ---------- */
+
+// "배포 → 껐다 켜기 두 번 → CDN 10분" 을 기다리지 않는 강제 갱신 버튼.
+// ① 새 서비스워커가 있으면 받아서 활성화될 때까지 기다리고
+// ② 지금 워커에게 셸 파일을 캐시 우회로 다시 받게 한 뒤
+// ③ 새로고침한다. 복습 기록·설정(IndexedDB)은 건드리지 않는다.
+async function refreshApp() {
+  const btn = $('btn-refresh-app');
+  const status = $('refresh-status');
+  btn.disabled = true;
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        status.textContent = '새 버전 확인 중…';
+        await reg.update().catch(() => {});
+        const fresh = reg.installing || reg.waiting;
+        if (fresh && fresh.state !== 'activated') {
+          status.textContent = '새 버전 설치 중…';
+          await new Promise((resolve) => {
+            const timer = setTimeout(resolve, 15000);
+            fresh.addEventListener('statechange', () => {
+              if (fresh.state === 'activated' || fresh.state === 'redundant') {
+                clearTimeout(timer);
+                resolve();
+              }
+            });
+          });
+        }
+        const ctrl = navigator.serviceWorker.controller;
+        if (ctrl) {
+          status.textContent = '앱 파일 다시 받는 중…';
+          await new Promise((resolve) => {
+            const timer = setTimeout(resolve, 20000);
+            const ch = new MessageChannel();
+            ch.port1.onmessage = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+            ctrl.postMessage({ type: 'refresh-shell' }, [ch.port2]);
+          });
+        }
+      }
+    }
+    status.textContent = '새로고침…';
+    location.reload();
+  } catch (e) {
+    btn.disabled = false;
+    status.textContent = `갱신 실패: ${e.message}`;
+    status.className = 'status err';
+  }
+}
+
 /* ---------- 동기화 ---------- */
 
 async function syncNow({ silent = false } = {}) {
@@ -750,12 +909,15 @@ async function syncNow({ silent = false } = {}) {
   }
   state.syncing = true;
   $('btn-sync').classList.add('spin');
+  $('btn-sync-hub').classList.add('spin');
   try {
     const res = await client.syncAll((msg) => {
       if (!silent) toast(msg, 8000);
     });
     await loadData();
     renderHome();
+    if ($('view-hub').classList.contains('active')) renderHub();
+    if ($('view-course').classList.contains('active')) renderCourseView();
     if (!silent) {
       const bits = [`카드 ${res.cards.total}장`];
       if (res.cards.fetched) bits.push(`${res.cards.fetched}개 파일 갱신`);
@@ -767,6 +929,7 @@ async function syncNow({ silent = false } = {}) {
   } finally {
     state.syncing = false;
     $('btn-sync').classList.remove('spin');
+    $('btn-sync-hub').classList.remove('spin');
   }
 }
 
@@ -801,8 +964,8 @@ function wire() {
       setToken(token);
       status.textContent = '연결됐다. 카드를 받는 중…';
       await syncNow({ silent: true });
-      show('home');
-      renderHome();
+      await renderHub();
+      show('hub');
       toast(`카드 ${state.cards.length}장 준비됨`);
     } catch (e) {
       status.textContent = e.message;
@@ -827,8 +990,14 @@ function wire() {
   $('btn-judge').addEventListener('click', judgeCompose);
   $('btn-done-home').addEventListener('click', async () => {
     await loadData();
-    renderHome();
-    show('home');
+    if (state.sessionOrigin) {
+      const courseId = state.sessionOrigin;
+      state.sessionOrigin = null;
+      await showCourseRun(courseId); // 카드 정거장이 자동 완료로 반영된 상태로 돌아간다
+    } else {
+      renderHome();
+      show('home');
+    }
   });
 
   els('.grade').forEach((btn) =>
@@ -836,20 +1005,26 @@ function wire() {
   );
 
   els('[data-ttab]').forEach((btn) =>
+    btn.addEventListener('click', () => goTab(btn.dataset.ttab))
+  );
+
+  els('[data-lab]').forEach((btn) =>
     btn.addEventListener('click', () => {
-      const t = btn.dataset.ttab;
-      if (t === 'todo') {
-        renderTodoView();
-        show('todo');
-      } else if (t === 'dissect') {
+      if (btn.dataset.lab === 'dissect') {
         renderDissect($('dissect-root'), { toast, submit: submitDissect });
         show('dissect');
       } else {
-        renderHome();
-        show('home');
+        renderTodoView();
+        show('todo');
       }
     })
   );
+
+  $('btn-course-back').addEventListener('click', () => {
+    renderCourseView();
+    show('course');
+  });
+  $('btn-sync-hub').addEventListener('click', () => syncNow());
 
   $('se-wfh').addEventListener('change', async () => {
     state.todo.wfhDow = parseInt($('se-wfh').value, 10);
@@ -863,6 +1038,7 @@ function wire() {
       if (to === 'stats') renderStats();
       if (to === 'settings') renderSettings();
       if (to === 'home') renderHome();
+      if (to === 'hub') renderHub();
       show(to);
     })
   );
@@ -907,6 +1083,7 @@ function wire() {
     }
   });
 
+  $('btn-refresh-app').addEventListener('click', refreshApp);
   $('btn-export').addEventListener('click', exportData);
   $('btn-import').addEventListener('click', () => $('file-import').click());
   $('file-import').addEventListener('change', (e) => {
@@ -968,8 +1145,8 @@ async function main() {
     $('su-branch').value = state.config.branch;
     show('setup');
   } else {
-    show('home');
-    renderHome();
+    show('hub');
+    await renderHub();
     if (navigator.onLine) syncNow({ silent: true });
   }
 

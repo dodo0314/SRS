@@ -1,9 +1,14 @@
-// To-Do 탭 — 오늘 날짜와 요일 유형(출근/재택/토/일)에서 "오늘 할 일"을 계산해 그린다.
+// 하루설계 — 오늘 날짜와 요일 유형(출근/재택/토/일)에서 "오늘 할 일"을 계산해 그린다.
 //
 // 계획의 출처: 하루설계 v3 (주4 폰-온리 + 주3 책상) + 2027 합격플랜 P1 진도표.
 // 진도의 단위는 "주"다. 주차 진도표(P1_WEEKS)가 재료를 정하고,
 // 요일 템플릿이 그 재료를 하루 프로토콜로 푼다.
 // 완료 체크는 이 기기에만 저장한다(복습 기록과 달리 동기화하지 않는다).
+//
+// 이 파일은 코스(course.js)의 데이터 원천이기도 하다. 과업마다:
+//   strand: 'uw'(기본) | 'en' 영어 코스 몫 | 'srs' 카드 창(코스의 카드 정거장이 대체) | 'info' 배너
+//   stage:  '지식'(기본) | '정리'  — 코스의 정거장 순서는 카드 → 지식 → 정리
+//   key:    같은 종류의 정거장을 코스가 중복 없이 합칠 때 쓰는 표식
 
 import * as db from './db.js';
 
@@ -103,9 +108,12 @@ const isRecordDay = (dow) => dow === 2 || dow === 5;
 // 전사·분석은 격주 토요일. P1 시작 기준 짝수 주에 돈다.
 const isTranscribeWeek = (now) => Math.floor((now - P1_START) / (7 * DAY)) % 2 === 0;
 
-function fourThreeTwo(now) {
+export function fourThreeTwo(now) {
   const rec = isRecordDay(new Date(now).getDay());
   return {
+    strand: 'en',
+    stage: '정리',
+    key: '432',
     title: `영어 4/3/2 — ${speakTopic(now).split(' —')[0]}${rec ? ' (녹음)' : ''}`,
     dur: '9분',
     detail:
@@ -119,6 +127,7 @@ function fourThreeTwo(now) {
 
 const T = {
   srsAm: {
+    strand: 'srs',
     title: 'SRS 카드 30~40분',
     dur: '30~40분',
     detail: '전체 큐 기준(덱 선택 해제 상태). 복습이 밀려 있으면 신규보다 복습 먼저. 놓친 논점 카드는 Again — 퇴근길 검산 대상이 된다.',
@@ -126,33 +135,43 @@ const T = {
   audio(now) {
     return now <= TOEIC_DAY
       ? {
+          strand: 'en',
+          stage: '지식',
+          key: 'listen',
           title: '남는 시간: 토익 LC 오디오',
           dur: '잔여',
           detail: 'Part 3·4를 스크립트 없이 1회 → 정답 확인 → 같은 지문 재청취. 새 지문 수집보다 같은 지문 반복이 우선.',
         }
       : {
+          strand: 'en',
+          stage: '지식',
+          key: 'listen',
           title: '남는 시간: 오디오 재청취',
           dur: '잔여',
           detail: '이미 본 인강 차시의 오디오 재청취(처음 듣는 강 금지 — 신규 입력은 책상 몫) 또는 The Voice of Insurance: 1회차는 멈추지 않고 대의만, 하차 후 들린 표현·안 들린 소리 5개 메모. 격주로 같은 회차 재청취.',
         };
   },
   lunch: {
+    strand: 'srs',
     title: '점심 SRS 20분',
     dur: '20분',
     detail: '결정 피로 없이 앱만 연다. 카드만. 다른 것 금지.',
   },
   recon: {
+    stage: '정리',
     title: '논점 목차 암송 → 폰 메모 검산',
     dur: '25분',
     detail:
       '검산 대상 2개를 고른다: ① 오늘 아침·어제 취침 전에 본 points(논점) 카드 중 헷갈렸던 것 ② 이번 주 해상 원문 진도의 조문 구조(예: 이번 주가 MIA 워런티 구간이면 "워런티 조항들의 목차"). 절차: 화면 안 보고 목차를 속으로 암송 → 폰 메모장에 1. 2. 3. 번호 목차로 적는다 → SRS에서 해당 카드를 열어(덱 ▶ 버튼) 대조 → 빠뜨린 항목이 있으면 그 카드를 Again 처리 → 메모는 버린다. 기록이 아니라 인출이 목적이다.',
   },
   srsPm: {
+    strand: 'srs',
     title: 'SRS 잔여 소진 → 오디오',
     dur: '~55분',
     detail: '아침에 남긴 복습 큐를 비운다. 다 비면 오디오(위와 같은 규칙). 종점은 헬스장 — 내리기 전 단백질음료.',
   },
   night: {
+    stage: '정리',
     title: '취침 전 인출 25분 (폰)',
     dur: '25분',
     detail:
@@ -180,6 +199,7 @@ const T = {
     };
   },
   cards: {
+    stage: '정리',
     title: '카드 작성 15분 (그날 배운 것만)',
     dur: '15분',
     detail:
@@ -190,12 +210,14 @@ const T = {
     if (now >= OPIC_SCORE + DAY) return null;
     if (now >= OPIC_DAY + DAY) {
       return {
+        strand: 'info',
         title: `OPIc 성적 발표 D-${Math.ceil((OPIC_SCORE - now) / DAY)} (9/9 13:00)`,
         dur: '—',
         detail: '발표되면 Underwriter/notes/지원기록.md의 어학란을 갱신하고, IM 이하면 25일 뒤 4단계로 재응시 접수. 재응시 전까지 4/3/2는 상설 밀도(주 5~6회 9분)로 돌아간다.',
       };
     }
     return {
+      strand: 'info',
       title: d <= 0 ? '⚡ 오늘 OPIc — 14:20 시청센터A (13:40 도착)' : `⚡ OPIc D-${d} — 9/4(금) 14:20 시청센터A`,
       dur: d <= 0 ? '당일' : '—',
       detail: d <= 0
@@ -204,6 +226,9 @@ const T = {
     };
   },
   errCards: {
+    strand: 'en',
+    stage: '정리',
+    key: 'err',
     title: '작문 오류 카드화 10분',
     dur: '10분',
     detail:
@@ -211,6 +236,9 @@ const T = {
   },
   transcribe() {
     return {
+      strand: 'en',
+      stage: '정리',
+      key: 'transcribe',
       title: '4/3/2 녹음 전사 → 오류 분석 → 카드',
       dur: '25분',
       detail:
@@ -218,12 +246,15 @@ const T = {
     };
   },
   wfhRule: {
+    strand: 'info',
     title: '⚠ 재택일 규칙',
     dur: '—',
     detail:
       '대기 호출에 대비해 모든 블록을 40분 단위로 쪼갠다 — 끊겨도 한 단위만 잃는다. 시간 측정 산출(실전 답안·모의)은 절대 오늘 하지 않는다(끊기면 훈련 가치 0 — 그건 토요일 B 몫). 실업무가 터져 소각되면: 일요일 A가 회계 인강을 흡수하고 이번 주 해상 인강은 스킵(원문만).',
   },
 };
+
+export const TASKS = T;
 
 /* ---------- 요일 템플릿 ---------- */
 
@@ -238,7 +269,7 @@ function commuteDay(now, phase) {
       tasks: [
         phase === 'p4'
           ? { id: 'c6', title: '회계 손계산 1h (P4 예외 — 출근일 유일한 책상)', dur: '60분', detail: '결전기에는 회계 매일 1h로 상향(합격플랜 P4). 유형 혼합 독립 풀이.' }
-          : { id: 'c6', title: '책상 없음 — 회복', dur: '—', detail: '운동 → 저녁 → 자유. 이 저녁을 비우는 것이 이 시간표의 목적이다. 밀린 학습을 여기로 가져오지 않는다(버퍼 주에서만 회수).' },
+          : { id: 'c6', strand: 'info', title: '책상 없음 — 회복', dur: '—', detail: '운동 → 저녁 → 자유. 이 저녁을 비우는 것이 이 시간표의 목적이다. 밀린 학습을 여기로 가져오지 않는다(버퍼 주에서만 회수).' },
       ],
     },
     { name: '취침 전 22:00~22:25', tasks: [{ id: 'c7', ...T.night }] },
@@ -260,7 +291,7 @@ function wfhDayP1(now, week) {
       name: '오후 — 해상 블록',
       tasks: [{ id: 'w3', ...T.marine(week) }, { id: 'w4', ...T.cards }],
     },
-    { name: '점심·저녁 (통근 창 대체)', tasks: [{ id: 'w5', ...T.lunch }, { id: 'w6', title: 'SRS 나머지 큐', dur: '30분', detail: '통근이 없는 날이라 복습 창이 부족하다 — 점심과 저녁 식후에 나눠 비운다.' }] },
+    { name: '점심·저녁 (통근 창 대체)', tasks: [{ id: 'w5', ...T.lunch }, { id: 'w6', strand: 'srs', title: 'SRS 나머지 큐', dur: '30분', detail: '통근이 없는 날이라 복습 창이 부족하다 — 점심과 저녁 식후에 나눠 비운다.' }] },
     { name: '취침 전', tasks: [{ id: 'w7', ...T.night }] },
   ];
 }
@@ -277,7 +308,7 @@ function saturday(now, week, phase) {
           : '2차 실전 답안 2문항 (3과목 로테이션, 실제 시간 측정, 직후 채점)');
   return [
     { name: '오전', tasks: [
-      { id: 's0', title: '컨디셔닝 09:00~11:00', dur: '2h', detail: '운동계획 참조. 고정 — 학습이 침식하지 않는다.' },
+      { id: 's0', strand: 'info', title: '컨디셔닝 09:00~11:00', dur: '2h', detail: '운동계획 참조. 고정 — 학습이 침식하지 않는다.' },
       { id: 's0b', ...fourThreeTwo(now) },
     ] },
     {
@@ -295,7 +326,7 @@ function saturday(now, week, phase) {
     {
       name: '학습 C 19:30~21:00',
       tasks: [
-        { id: 's3', title: '가벼운 것', dur: '1.5h', detail: '오늘 오답 카드화 → 밀린 인강 차시 배속 소화 → 이번 주 카드 품질 점검(질문이 인출을 강제하는가). 피곤하면 여기부터 버린다.' },
+        { id: 's3', stage: '정리', title: '가벼운 것', dur: '1.5h', detail: '오늘 오답 카드화 → 밀린 인강 차시 배속 소화 → 이번 주 카드 품질 점검(질문이 인출을 강제하는가). 피곤하면 여기부터 버린다.' },
         ...(isTranscribeWeek(now) ? [{ id: 's5', ...T.transcribe() }] : []),
       ],
     },
@@ -323,12 +354,12 @@ function sunday(now, week, phase) {
     {
       name: '마감',
       tasks: [
-        { id: 'n4', title: '지원 파이프라인 30분', dur: '30분', detail: '채용공고 스캔 → Underwriter/notes/지원기록.md 갱신 → 이번 주 지원 1건 진행 여부 결정. 합격 전 지원 병행 원칙 — 중단 없음.' },
+        { id: 'n4', stage: '정리', title: '지원 파이프라인 30분', dur: '30분', detail: '채용공고 스캔 → Underwriter/notes/지원기록.md 갱신 → 이번 주 지원 1건 진행 여부 결정. 합격 전 지원 병행 원칙 — 중단 없음.' },
         { id: 'n4b', ...T.errCards },
-        { id: 'n5', title: '주간 정리 30분', dur: '30분', detail: 'SRS 통계 확인(성숙 카드 비율) → 용어집 이관 → 저장소 커밋 → 다음 주 To-Do 확인. 계획 수정은 지금만 허용된다 — 주중에 계획을 만지작거리지 않는다.' },
+        { id: 'n5', stage: '정리', title: '주간 정리 30분', dur: '30분', detail: 'SRS 통계 확인(성숙 카드 비율) → 용어집 이관 → 저장소 커밋 → 다음 주 코스 확인. 계획 수정은 지금만 허용된다 — 주중에 계획을 만지작거리지 않는다.' },
       ],
     },
-    { name: '저녁', tasks: [{ id: 'n6', title: '완전 휴식 + 걷기', dur: '—', detail: '운동 완전휴식일. 취침 전 인출만 가볍게.' }] },
+    { name: '저녁', tasks: [{ id: 'n6', strand: 'info', title: '완전 휴식 + 걷기', dur: '—', detail: '운동 완전휴식일. 취침 전 인출만 가볍게.' }] },
   ];
 }
 
@@ -341,7 +372,7 @@ function prepDay(now) {
         { id: 'q2', title: '해상 1안(44차시) — 결제는 9월 중', dur: '—', detail: '지금은 수강기간 조건만 확인. 첫 4주는 상법 해상편 원문으로 시작하므로 급하지 않다.' },
         { id: 'q3', title: '재물특종은 지금 사지 않는다', dur: '—', detail: '착수가 12/15 — 수강기간이 결제일 기산이면 미리 사는 만큼 손해. 11월 말 결제. 그때 2027 개정판이 나와 있으면 그쪽.' },
         { id: 'q4', title: '설정에서 재택 요일 지정', dur: '1분', detail: '아래 설정 → To-Do → 재택(대기) 요일. 이 탭의 하루 구성이 그 요일 기준으로 바뀐다.' },
-        { id: 'q0', title: 'OPIc 서베이 확정 + 영어/OPIc-주제 덱 시작', dur: '1h', detail: 'OPIc-2026-09.md 2절의 12개 항목을 그대로 확정해 적어둔다(당일 그대로 입력). 그리고 SRS에서 영어/OPIc-주제 덱을 ▶ 로 돌려 1절 답변 틀 10장부터 — 막혔을 때 시간 버는 표현이 등급을 만든다.' },
+        { id: 'q0', strand: 'en', stage: '지식', title: 'OPIc 서베이 확정 + 영어/OPIc-주제 덱 시작', dur: '1h', detail: 'OPIc-2026-09.md 2절의 12개 항목을 그대로 확정해 적어둔다(당일 그대로 입력). 그리고 SRS에서 영어/OPIc-주제 덱을 ▶ 로 돌려 1절 답변 틀 10장부터 — 막혔을 때 시간 버는 표현이 등급을 만든다.' },
         { id: 'q5', title: '토익 진단 모의 1회분 준비', dur: '—', detail: '9/6(일) 학습 B에서 시간 재고 푼다. 기출 모의 1회분이면 충분 — 문제집 사재기 금지.' },
       ],
     },
@@ -486,7 +517,7 @@ export async function renderTodo(container, date, wfhDow) {
       </div>`
       )
       .join('')}
-    <p class="status foot">체크는 이 기기에만 저장된다 · 재택 요일은 설정에서 변경</p>`;
+    <p class="status foot">시간표 원본(참고용) — 여기 체크는 코스와 별개다 · 재택 요일은 설정에서 변경</p>`;
 
   container.querySelectorAll('[data-check]').forEach((btn) =>
     btn.addEventListener('click', async () => {

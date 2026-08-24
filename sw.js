@@ -3,13 +3,14 @@
 // 앱 껍데기는 캐시에서 즉시 내주고 뒤에서 새 버전을 받아둔다(stale-while-revalidate).
 // 다음 실행 때 새 버전이 뜬다. GitHub API 응답은 절대 캐시하지 않는다.
 
-const CACHE = 'srs-shell-v15';
+const CACHE = 'srs-shell-v16';
 const SHELL = [
   './',
   './index.html',
   './style.css',
   './manifest.webmanifest',
   './js/app.js',
+  './js/course.js',
   './js/todo.js',
   './js/dissect.js',
   './js/dissect-data.js',
@@ -42,6 +43,33 @@ self.addEventListener('activate', (event) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+// 설정의 "지금 갱신" — 셸 파일 전부를 브라우저 캐시와 Pages CDN 캐시(10분)까지
+// 우회해(고유 쿼리) 다시 받아 현재 캐시에 넣는다. 끝나면 포트로 알린다.
+async function refreshShell() {
+  const cache = await caches.open(CACHE);
+  const stamp = Date.now();
+  await Promise.all(
+    SHELL.map(async (url) => {
+      try {
+        const res = await fetch(`${url}${url.includes('?') ? '&' : '?'}fresh=${stamp}`, { cache: 'reload' });
+        if (res && res.ok) await cache.put(new Request(url), res);
+      } catch {
+        // 오프라인 등 — 받은 것만 갱신하고 넘어간다
+      }
+    })
+  );
+}
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'refresh-shell') {
+    event.waitUntil(
+      refreshShell().then(() => {
+        if (event.ports && event.ports[0]) event.ports[0].postMessage({ ok: true });
+      })
+    );
+  }
 });
 
 self.addEventListener('fetch', (event) => {
