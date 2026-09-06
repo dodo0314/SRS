@@ -18,7 +18,7 @@ import {
 const TOKEN_KEY = 'srs.token';
 const ANTHROPIC_KEY = 'srs.anthropicKey';
 const GEMINI_KEY = 'srs.geminiKey';
-const APP_VERSION = '1.10.0';
+const APP_VERSION = '1.10.1';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
@@ -53,6 +53,10 @@ function show(view) {
   const target = $(`view-${view}`);
   target.hidden = false;
   target.classList.add('active');
+  // 새 화면은 맨 위에서 시작한다 — 스크롤은 화면 안의 .wrap/.card-area가 갖고 있으므로 그것도 되돌린다
+  els('.wrap, .card-area', target).forEach((s) => {
+    s.scrollTop = 0;
+  });
   window.scrollTo(0, 0);
 }
 
@@ -1115,6 +1119,8 @@ function wire() {
 /* ---------- 시작 ---------- */
 
 async function main() {
+  // 사파리가 지난 세션의 문서 스크롤 위치를 되살려 화면 위가 잘린 채 뜨지 않게 한다
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   await db.open();
   await loadSettings();
   await loadData();

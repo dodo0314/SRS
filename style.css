@@ -48,8 +48,8 @@ html, body {
   padding: 0;
   height: 100%;
   width: 100%;
-  /* 세로 스크롤만 허용한다. 내용이 삐져나가도 화면이 옆으로 밀리지 않는다. */
-  overflow-x: hidden;
+  /* 문서 자체는 스크롤하지 않는다. 스크롤은 각 화면의 .wrap / .card-area 안에서만 한다. */
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
@@ -60,7 +60,16 @@ html, body {
   overscroll-behavior: none;
 }
 
-body { display: flex; flex-direction: column; }
+/* 본문을 보이는 영역에 못박는다. 아이폰 사파리는 주소창·툴바가 접히고 펴질 때 문서 높이와
+   보이는 영역이 어긋나 첫 실행에 상단 바가 화면 위로 밀려 잘리는 일이 있었다(새로고침해야 돌아옴).
+   position: fixed + inset: 0 이면 본문이 항상 지금 보이는 영역과 같은 크기라 문서가 밀릴 여지가 없다. */
+body {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+}
 
 .view { display: none; flex-direction: column; flex: 1; min-height: 0; }
 .view.active { display: flex; }

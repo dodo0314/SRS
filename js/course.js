@@ -123,7 +123,7 @@ const stationFromTask = (t, win) => ({
 
 /**
  * 오늘의 코스를 만든다. 하루설계(planFor)가 재료를 대고,
- * 영어 코스는 매일 도는 골격(카드→읽기→듣기→4/3/2)을 그 위에 고정으로 깐다.
+ * 영어 코스는 매일 도는 골격(카드→듣기→4/3/2)을 그 위에 고정으로 깐다.
  * 다른 코스는 strand가 자기 id인 하루설계 과업이 정거장이다.
  */
 export function buildCourse(courseId, date, ctx) {
@@ -144,14 +144,8 @@ export function buildCourse(courseId, date, ctx) {
   let stations = [cardStation(courseId, ctx)];
 
   if (courseId === 'en') {
-    stations.push({
-      id: 'en-read',
-      stage: '지식',
-      title: '좁은 읽기 — 보험 영어 한 조각',
-      dur: '15분',
-      detail:
-        '로펌 뉴스레터 → ICC·워딩 → 판결문 사다리에서 오늘 한 조각. 페이지당 모르는 단어가 3개를 넘으면 그 단어들을 카드로 만들고 같은 자료를 다시 읽는다(98% 규칙) — 좁은 읽기에서는 재독이 곧 커버리지 상승이다. 여기서 만난 재료가 마지막 정거장(4/3/2)의 말할 거리가 된다.',
-    });
+    // 2026-09-06 — 「좁은 읽기 — 보험 영어 한 조각」 정거장은 뺐다. 재물손사·UW를 접으면서(커리어검토/74 1절)
+    // 보험 도메인 읽기가 영어 코스의 재료에서 빠졌기 때문이다. 영어 골격은 카드 → 듣기 → 4/3/2.
     const listen = TASKS.audio(now);
     stations.push({
       id: 'en-listen',
