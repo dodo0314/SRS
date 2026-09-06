@@ -17,22 +17,71 @@ const STATE_KEY = 'courseState'; // { en: { days: { '2026-08-24': { done: [], st
 const STAGES = ['카드', '지식', '정리'];
 const RANK = { none: 0, partial: 1, min: 2, full: 3 };
 
+// 코스 명부. deckPrefix가 그 코스의 카드 정거장 범위(최상위 덱 이름의 접두어)이고,
+// null이면 다른 코스가 안 가져간 나머지 전부다. 하루설계(todo.js) 과업의 strand가 코스 id와 같으면
+// 그 코스의 정거장이 된다. archived가 있는 코스는 홈·Course 어디에도 뜨지 않는다 — 정의는 남겨 두어
+// 되살릴 때 표식 한 줄만 지우면 된다.
 export const COURSES = {
   en: {
     id: 'en',
     name: '영어 코스',
+    short: '영어',
     icon: '🗣️',
+    deckPrefix: '영어',
     cardsTitle: '영어 오늘의 카드',
     minLabel: '영어 오늘의 카드 + 4/3/2 한 세트',
+    cardsDetail: 'compose 카드는 내 문장 1개(작문 코치)까지가 한 장이다.',
+  },
+  stats: {
+    id: 'stats',
+    name: '통계 코스',
+    short: '통계',
+    icon: '📈',
+    deckPrefix: '통계',
+    cardsTitle: '통계 오늘의 카드',
+    minLabel: '통계 오늘의 카드 + 아무 정거장 1개 (정거장이 카드뿐인 날은 카드가 곧 완주)',
+    cardsDetail:
+      '통계/탐지평가 덱 — 토요일 시뮬레이터 세션의 인출 재료다(통계/00-커리큘럼.md 11절). ' +
+      '카드는 세션 끝 15분에 그날 막힌 것만 만든다 — 미리 만들지 않는다. 막힌 카드는 Again.',
   },
   uw: {
     id: 'uw',
     name: 'UW 코스',
+    short: 'UW',
     icon: '🧾',
+    deckPrefix: null,
     cardsTitle: '보험 오늘의 카드',
     minLabel: '보험 오늘의 카드 + 아무 정거장 1개',
+    cardsDetail: '놓친 논점 카드는 Again으로 — 암송 검산 대상이 된다.',
+    // 2026-09-06 보관 — 재물손사 시험 포기(커리어검토/74 1절 · 하루설계 ⊕). 카드 덱은 srs/archive/cards/에 있다.
+    archived: '2026-09-06',
   },
 };
+
+/** 홈과 Course 화면에 뜨는 코스 id — 명부 순서대로. */
+export const ACTIVE_COURSES = Object.values(COURSES)
+  .filter((c) => !c.archived)
+  .map((c) => c.id);
+
+/**
+ * 최상위 덱 이름들을 코스별로 가른다. 접두어가 있는 코스가 먼저 가져가고,
+ * deckPrefix가 null인 코스가 나머지를 받는다. 보관된 코스도 몫은 계산한다(되살릴 때 그대로 쓴다).
+ */
+export function splitDeckTops(tops) {
+  const out = {};
+  const claimed = new Set();
+  const all = Object.values(COURSES);
+  for (const c of all) {
+    if (!c.deckPrefix) continue;
+    out[c.id] = tops.filter((t) => t === c.deckPrefix || t.startsWith(c.deckPrefix));
+    out[c.id].forEach((t) => claimed.add(t));
+  }
+  for (const c of all) {
+    if (c.deckPrefix) continue;
+    out[c.id] = tops.filter((t) => !claimed.has(t));
+  }
+  return out;
+}
 
 export const BADGE = {
   full: '🔥 풀코스',
@@ -58,9 +107,7 @@ function cardStation(courseId, ctx) {
     dur: left ? `${left}장` : '',
     detail:
       'SRS 탭과 같은 카드, 같은 기록이다 — 통근길에 미리 돌렸으면 이 정거장은 이미 완료로 떠 있다. ' +
-      (courseId === 'en'
-        ? 'compose 카드는 내 문장 1개(작문 코치)까지가 한 장이다.'
-        : '놓친 논점 카드는 Again으로 — 암송 검산 대상이 된다.'),
+      COURSES[courseId].cardsDetail,
   };
 }
 
@@ -77,6 +124,7 @@ const stationFromTask = (t, win) => ({
 /**
  * 오늘의 코스를 만든다. 하루설계(planFor)가 재료를 대고,
  * 영어 코스는 매일 도는 골격(카드→읽기→듣기→4/3/2)을 그 위에 고정으로 깐다.
+ * 다른 코스는 strand가 자기 id인 하루설계 과업이 정거장이다.
  */
 export function buildCourse(courseId, date, ctx) {
   const now = date.getTime();
@@ -124,7 +172,7 @@ export function buildCourse(courseId, date, ctx) {
     }
   } else {
     for (const { t, strand, win } of planTasks) {
-      if (strand !== 'uw') continue;
+      if (strand !== courseId) continue;
       stations.push(stationFromTask(t, win));
     }
   }
@@ -246,16 +294,16 @@ export function wireBanner(root) {
 
 const streakLine = (n) => (n ? `연속달성 ${n}일` : '연속달성 0일');
 
-/** Course 첫 화면 — 영어 / UW 두 코스의 오늘 상태. */
+/** Course 첫 화면 — 활성 코스(영어 / 통계)의 오늘 상태. */
 export async function renderCourseHub(container, date, ctx) {
-  const en = await refreshToday('en', date, ctx);
-  const uw = await refreshToday('uw', date, ctx);
-  const ov = { en, uw };
+  const ov = {};
+  for (const id of ACTIVE_COURSES) ov[id] = await refreshToday(id, date, ctx);
+  const first = ov[ACTIVE_COURSES[0]];
 
   container.innerHTML =
-    bannerHtml(en.banner) +
-    `<p class="status" style="margin:0 0 12px">${esc(en.plan.label)} · ${esc(en.plan.dayType)} · ${esc(en.plan.phaseLabel)}</p>` +
-    ['en', 'uw']
+    bannerHtml(first.banner) +
+    `<p class="status" style="margin:0 0 12px">${esc(first.plan.label)} · ${esc(first.plan.dayType)} · ${esc(first.plan.phaseLabel)}</p>` +
+    ACTIVE_COURSES
       .map((id) => {
         const o = ov[id];
         const meta = COURSES[id];

@@ -10,14 +10,15 @@ import {
   buildQueue, Session, countIntroducedToday, forecast, startOfDay, DEFAULT_LIMITS,
 } from './queue.js';
 import { renderTodo } from './todo.js';
-import { renderDissect } from './dissect.js';
 import { judgeSentence, VERDICT_LABEL, ERROR_LABEL } from './coach.js';
-import { COURSES, BADGE, refreshToday, renderCourseHub, renderCourseRun, bannerHtml, wireBanner } from './course.js';
+import {
+  COURSES, ACTIVE_COURSES, BADGE, splitDeckTops, refreshToday, renderCourseHub, renderCourseRun, bannerHtml, wireBanner,
+} from './course.js';
 
 const TOKEN_KEY = 'srs.token';
 const ANTHROPIC_KEY = 'srs.anthropicKey';
 const GEMINI_KEY = 'srs.geminiKey';
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.10.0';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
@@ -82,22 +83,6 @@ function coachConfig() {
   return null;
 }
 
-/** 해부 결과를 저장소 srs/dissect/에 md로 커밋한다. 같은 날 같은 약관은 덮어쓴다. */
-async function submitDissect(sourceId, markdown) {
-  const token = getToken();
-  if (!token || !state.config.owner) throw new Error('저장소 연결이 없다');
-  const repo = new GitHubRepo({ ...state.config, token });
-  const d = new Date();
-  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const path = `srs/dissect/${day}-${sourceId}.md`;
-  const existing = await repo.readFileIfExists(path);
-  await repo.writeFile(path, markdown, {
-    sha: existing?.sha,
-    message: `dissect: ${day} ${sourceId} 해부 결과`,
-  });
-  return path;
-}
-
 function syncClient() {
   const token = getToken();
   if (!token || !state.config.owner || !state.config.repo) return null;
@@ -138,11 +123,9 @@ function renderTodoView() {
 
 /* ---------- 홈 허브와 코스 ---------- */
 
-/** 최상위 덱을 영어/보험(그 외 전부)으로 가른다 — 코스의 카드 정거장 범위. */
+/** 최상위 덱을 코스별로 가른다 — 코스의 카드 정거장 범위. 규칙은 course.js의 COURSES가 정한다. */
 function deckTops() {
-  const tops = [...new Set(state.cards.map((c) => c.deck.split('/')[0]))];
-  const en = tops.filter((t) => t === '영어' || t.startsWith('영어'));
-  return { en, uw: tops.filter((t) => !en.includes(t)) };
+  return splitDeckTops([...new Set(state.cards.map((c) => c.deck.split('/')[0]))]);
 }
 
 /** course.js에 넘기는 문맥 — 카드 큐는 SRS와 완전히 같은 계산을 쓴다. */
@@ -171,25 +154,25 @@ async function renderHub() {
   $('hub-title').textContent = todayLabel();
   const ctx = courseCtx();
   const date = new Date();
-  const en = await refreshToday('en', date, ctx);
-  const uw = await refreshToday('uw', date, ctx);
+  const ov = {};
+  for (const id of ACTIVE_COURSES) ov[id] = await refreshToday(id, date, ctx);
   const { counts } = todayCounts([]);
 
   const bn = $('hub-banner');
-  bn.innerHTML = bannerHtml(en.banner);
+  bn.innerHTML = bannerHtml(ov[ACTIVE_COURSES[0]].banner);
   wireBanner(bn);
 
-  // 결심은 한 번 — CTA는 진행 중인 코스를 먼저, 없으면 영어부터 가리킨다
-  const open = ['en', 'uw'].filter((id) => ({ en, uw })[id].status !== 'full');
-  const target = open.find((id) => ({ en, uw })[id].doneN > 0) || open[0] || null;
+  // 결심은 한 번 — CTA는 진행 중인 코스를 먼저, 없으면 첫 코스(영어)부터 가리킨다
+  const open = ACTIVE_COURSES.filter((id) => ov[id].status !== 'full');
+  const target = open.find((id) => ov[id].doneN > 0) || open[0] || null;
   const cta = $('hub-cta');
   if (!target) {
     cta.textContent = '🔥 오늘 완주 — 내일 또 봐!';
     cta.disabled = true;
     cta.onclick = null;
-    $('hub-cta-sub').textContent = `영어 연속달성 ${en.streak}일 · UW 연속달성 ${uw.streak}일`;
+    $('hub-cta-sub').textContent = ACTIVE_COURSES.map((id) => `${COURSES[id].short} 연속달성 ${ov[id].streak}일`).join(' · ');
   } else {
-    const o = { en, uw }[target];
+    const o = ov[target];
     cta.textContent = `${COURSES[target].icon} ${COURSES[target].name} ${o.doneN ? '이어하기' : '시작'} — ${o.doneN}/${o.total}`;
     cta.disabled = false;
     $('hub-cta-sub').textContent =
@@ -197,10 +180,11 @@ async function renderHub() {
     cta.onclick = () => showCourseRun(target);
   }
 
+  const courseSub = ACTIVE_COURSES.map((id) => `${COURSES[id].short} ${ov[id].doneN}/${ov[id].total} ${BADGE[ov[id].status]}`).join(' · ');
   $('hub-tiles').innerHTML = [
     { go: 'srs', ico: '🗂️', name: 'SRS', sub: `복습 ${counts.due} · 신규 ${counts.new} — 카드 자유 이용` },
-    { go: 'course', ico: '🧭', name: 'Course', sub: `영어 ${en.doneN}/${en.total} ${BADGE[en.status]} · UW ${uw.doneN}/${uw.total} ${BADGE[uw.status]}` },
-    { go: 'lab', ico: '🧪', name: '실험실', sub: '약관해부 · 하루설계' },
+    { go: 'course', ico: '🧭', name: 'Course', sub: courseSub },
+    { go: 'lab', ico: '🧪', name: '실험실', sub: '하루설계' },
   ]
     .map(
       (t) => `<button class="hub-tile" data-hub-go="${t.go}">
@@ -1010,13 +994,8 @@ function wire() {
 
   els('[data-lab]').forEach((btn) =>
     btn.addEventListener('click', () => {
-      if (btn.dataset.lab === 'dissect') {
-        renderDissect($('dissect-root'), { toast, submit: submitDissect });
-        show('dissect');
-      } else {
-        renderTodoView();
-        show('todo');
-      }
+      renderTodoView();
+      show('todo');
     })
   );
 
