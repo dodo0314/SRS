@@ -6,17 +6,22 @@
 const API = 'https://api.github.com';
 
 export class GitHubError extends Error {
-  constructor(message, status) {
+  constructor(message, status, body = '') {
     super(message);
     this.name = 'GitHubError';
     this.status = status;
+    this.body = body; // 원본 응답. 403의 종류(권한 / 한도 / 파일 크기)를 가려내는 데 쓴다
   }
 }
+
+/** contents API의 1MB 제한에 걸린 응답인가. 403의 다른 원인과 갈라야 한다. */
+const isTooLarge = (body) => /too_large|too large/i.test(String(body || ''));
 
 function messageFor(status, body) {
   if (status === 401) return '토큰이 유효하지 않다. 설정에서 다시 발급해 넣을 것.';
   if (status === 403) {
     if (/rate limit/i.test(body)) return 'GitHub 요청 한도 초과. 잠시 후 다시 시도할 것.';
+    if (isTooLarge(body)) return '파일이 1MB를 넘어 contents API로 읽을 수 없다.';
     return '토큰에 이 저장소 권한이 없다. Contents 읽기/쓰기 권한을 확인할 것.';
   }
   if (status === 404) return '경로를 찾을 수 없다. 저장소 이름, 브랜치, 폴더 경로를 확인할 것.';
@@ -67,7 +72,7 @@ export class GitHubRepo {
     });
     if (res.status === 204) return null;
     const text = await res.text();
-    if (!res.ok) throw new GitHubError(messageFor(res.status, text), res.status);
+    if (!res.ok) throw new GitHubError(messageFor(res.status, text), res.status, text);
     return text ? JSON.parse(text) : null;
   }
 
@@ -107,11 +112,41 @@ export class GitHubRepo {
     return fromBase64(blob.content);
   }
 
-  async readFile(path) {
-    const res = await this.request(
-      `/contents/${encodeURI(path)}?ref=${encodeURIComponent(this.branch)}`
+  /** 파일 하나의 메타데이터(sha·size)를 부모 폴더 목록에서 찾는다. 크기 제한이 없다. */
+  async statFile(path) {
+    const slash = String(path).lastIndexOf('/');
+    const dir = slash === -1 ? '' : path.slice(0, slash);
+    const entries = await this.request(
+      `/contents/${encodeURI(dir)}?ref=${encodeURIComponent(this.branch)}`
     );
-    return { text: res.content ? fromBase64(res.content) : '', sha: res.sha };
+    if (!Array.isArray(entries)) return null;
+    return entries.find((e) => e.path === path && e.type === 'file') || null;
+  }
+
+  /**
+   * 파일 하나를 읽는다.
+   *
+   * contents API는 1MB까지만 내용을 준다. 그보다 큰 파일은 GitHub 구현에 따라
+   * (a) 200이지만 content가 빈 문자열(encoding: 'none')이거나 (b) 403 too_large다.
+   * 둘 다 그대로 두면 review.json이 1MB를 넘는 순간 동기화가 통째로 멈추고,
+   * (a)는 "파일이 손상됐다"로 읽혀 로컬 기록이 원격을 덮어쓸 수도 있다.
+   * 두 경우 모두 카드 파일과 같은 blob API(100MB)로 우회한다.
+   */
+  async readFile(path) {
+    let res;
+    try {
+      res = await this.request(
+        `/contents/${encodeURI(path)}?ref=${encodeURIComponent(this.branch)}`
+      );
+    } catch (e) {
+      if (e.status !== 403 || !isTooLarge(e.body)) throw e;
+      const meta = await this.statFile(path); // 403이라 sha를 못 받았다. 목록에서 가져온다
+      if (!meta) throw e;
+      return { text: await this.readBlob(meta.sha), sha: meta.sha };
+    }
+    if (res.content) return { text: fromBase64(res.content), sha: res.sha };
+    if (res.size) return { text: await this.readBlob(res.sha), sha: res.sha };
+    return { text: '', sha: res.sha }; // 진짜로 빈 파일
   }
 
   /** 없으면 null. 있으면 { text, sha }. */

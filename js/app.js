@@ -7,7 +7,7 @@ import {
   RATING, STATE, newState, schedule, previewIntervals, formatInterval,
 } from './fsrs.js';
 import {
-  buildQueue, Session, countIntroducedToday, forecast, startOfDay, DEFAULT_LIMITS,
+  buildQueue, Session, countIntroducedToday, forecast, startOfDay, isDueNow, DEFAULT_LIMITS,
 } from './queue.js';
 import { renderTodo } from './todo.js';
 import { judgeSentence, VERDICT_LABEL, ERROR_LABEL } from './coach.js';
@@ -36,6 +36,7 @@ const state = {
   session: null,
   current: null,
   revealed: false,
+  answering: false, // answer()가 저장 중 — 두 번째 입력이 다음 카드를 먹지 않게 막는다
   recalled: new Set(),
   undoStack: [],
   syncing: false,
@@ -298,7 +299,9 @@ function renderDecks() {
   for (const card of state.cards) {
     const s = state.states.get(card.id);
     const isNew = !s || !s.lastReview;
-    const isDue = s && s.lastReview && s.due <= new Date(now).setHours(23, 59, 59, 999);
+    // 덱 목록의 숫자는 큐와 같은 기준으로 센다. 여기서만 하루 끝까지 당기면
+    // 홈은 "복습 1"인데 복습을 시작하면 아무것도 안 나오는 상태가 된다.
+    const isDue = isDueNow(s, now);
     for (const name of new Set([card.deck.split('/')[0], card.deck])) {
       const row = cutoffCounts.get(name) || { due: 0, new: 0, total: 0 };
       row.total += 1;
@@ -422,7 +425,9 @@ function renderCard() {
 }
 
 function reveal() {
-  if (state.revealed) return;
+  // answering 중에는 revealed가 이미 false다. 여기서 막지 않으면 저장이 끝나기 전에
+  // 방금 답한 카드의 뒷면이 다시 열린다.
+  if (state.revealed || state.answering) return;
   state.revealed = true;
   const { card, state: cardState } = state.current;
 
@@ -604,25 +609,36 @@ function updateSuggestion() {
 }
 
 async function answer(grade) {
-  if (!state.revealed || !state.current) return;
-  const { card, state: prev } = state.current;
-  const now = Date.now();
-  const before = prev ? { ...prev } : null;
-  const { state: next, log } = schedule(prev || newState(), grade, now, state.fsrs);
-  next.id = card.id;
+  // 저장(await 3번)이 끝나기 전에 두 번째 입력이 들어오면 revealed가 아직 true라
+  // 그대로 통과하고, 두 번째 advance()가 **다음 카드**를 보지도 않은 채 소비한다.
+  // 이중 탭·키 반복이 실제로 그 창을 만든다. 들어오자마자 문을 닫는다.
+  if (state.answering || !state.revealed || !state.current) return;
+  state.answering = true;
+  state.revealed = false;
+  try {
+    const { card, state: prev } = state.current;
+    const now = Date.now();
+    const before = prev ? { ...prev } : null;
+    const { state: next, log } = schedule(prev || newState(), grade, now, state.fsrs);
+    next.id = card.id;
 
-  await db.put(db.STORES.STATES, next);
-  await db.appendLog(card.id, log);
-  state.states.set(card.id, next);
-  state.logs.push({ key: db.logKey(card.id, log.at), id: card.id, ...log });
-  await db.setSetting('dirty', true);
+    await db.put(db.STORES.STATES, next);
+    await db.appendLog(card.id, log);
+    state.states.set(card.id, next);
+    state.logs.push({ key: db.logKey(card.id, log.at), id: card.id, ...log });
+    await db.setSetting('dirty', true);
 
-  state.undoStack.push({ cardId: card.id, before, logKey: db.logKey(card.id, log.at) });
-  state.session.advance(next, now);
-  nextCard();
+    state.undoStack.push({ cardId: card.id, before, logKey: db.logKey(card.id, log.at) });
+    state.session.advance(next, now);
+    nextCard();
+  } finally {
+    state.answering = false;
+  }
 }
 
 async function undo() {
+  // 저장이 도는 중에 되돌리면 방금 평가가 undoStack에 아직 없다. 끝난 뒤에 누른다.
+  if (state.answering) return;
   const last = state.undoStack.pop();
   if (!last) return;
   if (last.before) {
@@ -683,13 +699,26 @@ function streak() {
   return n;
 }
 
+/**
+ * 이 복습이 날짜를 넘겨서 이뤄졌는가. 정답률(유지율)은 하루 이상 묵힌 복습만 센다 —
+ * 같은 날 다시 본 것을 넣으면 거의 다 맞아서 숫자가 부풀려진다.
+ *
+ * 로그의 elapsedDays는 2026-09-09부터 날짜 경계 기준 정수지만, 그 전 기록은 실시간
+ * 소수(어제 22:00 → 오늘 08:00이 0.42)라 `>= 1`로 거르면 다음날 아침 복습이 통째로
+ * 빠졌다. 기록된 값으로 직전 복습 시각을 되돌려 날짜가 바뀌었는지 본다 — 두 표기 모두 맞다.
+ */
+function crossedDay(l) {
+  const elapsed = Number(l.elapsedDays) || 0;
+  return startOfDay(l.at - elapsed * DAY) < startOfDay(l.at);
+}
+
 function renderStats() {
   const today = startOfDay(Date.now());
   $('st-today').textContent = state.logs.filter((l) => l.at >= today).length;
   $('st-streak').textContent = streak();
 
   const since = Date.now() - 30 * DAY;
-  const mature = state.logs.filter((l) => l.at >= since && l.state === STATE.REVIEW && l.elapsedDays >= 1);
+  const mature = state.logs.filter((l) => l.at >= since && l.state === STATE.REVIEW && crossedDay(l));
   $('st-retention').textContent = mature.length
     ? `${Math.round((mature.filter((l) => l.grade > RATING.AGAIN).length / mature.length) * 100)}%`
     : '–';
@@ -1089,6 +1118,8 @@ function wire() {
   document.addEventListener('keydown', (e) => {
     if (!el('#view-review').classList.contains('active')) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    // 키를 누르고 있으면 OS가 같은 키를 연달아 보낸다. 한 번 누른 것은 한 장이다.
+    if (e.repeat) return;
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       if (!state.revealed) reveal();

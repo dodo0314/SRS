@@ -30,6 +30,32 @@ export const DEFAULT_OPTIONS = {
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+/**
+ * 하루의 시작(로컬 자정).
+ *
+ * 이 앱의 하루 경계는 여기 한 곳에서만 정한다 — queue.js의 큐 마감·신규 한도·예보가
+ * 이 함수를 그대로 가져다 쓴다. 경계를 자정이 아닌 시각("하루는 04시에 시작")으로
+ * 옮기고 싶으면 이 함수만 고치면 스케줄러와 큐가 함께 따라온다.
+ */
+export function startOfDay(now = Date.now()) {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * 두 시각 사이에 놓인 날짜 경계의 수.
+ *
+ * 어제 22:00에 본 카드를 오늘 08:00에 보면 0.42가 아니라 **1일**이다.
+ * FSRS/Anki가 경과 일수를 세는 방식이고, 실시간 소수로 재면 하루를 넘긴 복습이
+ * 「같은 날 재복습」으로 잘못 분류돼 회상 확률이 통째로 버려진다.
+ * 서머타임 등으로 하루가 23·25시간이 되는 경우가 있어 round로 맞춘다.
+ */
+export function dayDiff(from, to) {
+  if (!from) return 0;
+  return Math.max(0, Math.round((startOfDay(to) - startOfDay(from)) / DAY));
+}
+
 /** 새 카드의 초기 상태. */
 export function newState() {
   return {
@@ -136,7 +162,10 @@ export function schedule(state, grade, now = Date.now(), options = {}) {
 
   const prev = state || newState();
   const isNew = prev.state === STATE.NEW || !prev.lastReview;
-  const elapsedDays = isNew ? 0 : Math.max(0, (now - prev.lastReview) / DAY);
+  // 경과 일수는 날짜 경계로 센다(dayDiff). 회상 확률도 이 정수 일수로 계산한다 —
+  // FSRS의 가중치는 "예정된 경과 일수"(정수)로 학습된 값이라, 실시간 소수를 넣으면
+  // 파라미터가 가정한 입력과 어긋난다.
+  const elapsedDays = isNew ? 0 : dayDiff(prev.lastReview, now);
   const r = isNew ? 0 : retrievability(prev.stability, elapsedDays);
 
   let difficulty;
@@ -147,8 +176,9 @@ export function schedule(state, grade, now = Date.now(), options = {}) {
     stability = initialStability(w, grade);
   } else {
     difficulty = nextDifficulty(w, prev.difficulty, grade);
-    if (elapsedDays < 1) {
-      // 같은 날 다시 본 경우. 장기 모델을 적용하면 간격이 과대평가된다.
+    if (elapsedDays === 0) {
+      // 같은 날짜에 다시 본 경우. 장기 모델을 적용하면 간격이 과대평가된다.
+      // 날짜가 하루라도 바뀌었으면(어젯밤 → 오늘 아침 포함) 아래 장기 공식으로 간다.
       stability = stabilityShortTerm(w, prev.stability, grade);
     } else if (grade === RATING.AGAIN) {
       stability = stabilityAfterLapse(w, difficulty, prev.stability, r);
@@ -206,20 +236,32 @@ export function schedule(state, grade, now = Date.now(), options = {}) {
 
 /**
  * 평가하지 않고 각 버튼의 예상 간격만 계산한다. 버튼 라벨에 쓴다.
+ *
+ * state.interval은 하루 미만이면 0이라 버튼이 전부 "10분"으로 보인다 —
+ * 실제로는 13시간 뒤일 수 있다. 그래서 schedule()이 실제로 잡는 due에서
+ * 거꾸로 계산한다(수식을 여기서 다시 쓰지 않는다). 단위는 일이고 하루 미만은
+ * 소수로 나온다. 퍼지는 끄므로 하루 이상은 정수가 된다.
  */
 export function previewIntervals(state, now = Date.now(), options = {}) {
   const opt = { ...DEFAULT_OPTIONS, ...options, enableFuzz: false };
   const out = {};
   for (const g of [RATING.AGAIN, RATING.HARD, RATING.GOOD, RATING.EASY]) {
-    out[g] = schedule(state, g, now, opt).state.interval;
+    out[g] = (schedule(state, g, now, opt).state.due - now) / DAY;
   }
   return out;
 }
 
-/** 간격(일)을 사람이 읽는 표기로. */
+/** 간격(일)을 사람이 읽는 표기로. 하루 미만은 분·시간으로 적는다. */
 export function formatInterval(days) {
-  if (!days || days < 1) return '10분';
-  if (days < 30) return `${days}일`;
-  if (days < 365) return `${(days / 30).toFixed(days < 90 ? 1 : 0)}개월`;
-  return `${(days / 365).toFixed(1)}년`;
+  if (!days || days <= 0) return '10분';
+  if (days < 1) {
+    const minutes = Math.max(1, Math.round(days * 24 * 60));
+    if (minutes < 60) return `${minutes}분`;
+    const hours = minutes / 60;
+    return `${hours < 10 ? hours.toFixed(1) : Math.round(hours)}시간`;
+  }
+  const d = Math.round(days);
+  if (d < 30) return `${d}일`;
+  if (d < 365) return `${(d / 30).toFixed(d < 90 ? 1 : 0)}개월`;
+  return `${(d / 365).toFixed(1)}년`;
 }

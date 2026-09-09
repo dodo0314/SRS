@@ -3,21 +3,36 @@
 // 오늘 볼 카드를 고르고 세션 안에서의 순서를 관리한다.
 // 저장소 접근은 하지 않는다. 순수 함수와 세션 객체만 둔다.
 
-import { STATE } from './fsrs.js';
+import { STATE, startOfDay } from './fsrs.js';
 
 const DAY = 86400000;
 
-/** 오늘 자정 직전(로컬 시각). 하루 경계 기준. */
+// 하루 경계의 정의는 fsrs.js에 하나만 둔다. 스케줄러가 경과 일수를 세는 경계와
+// 큐가 "오늘"을 자르는 경계가 어긋나면, 하루를 넘긴 복습이 단기 공식을 타는
+// 종류의 어긋남이 다시 생긴다.
+export { startOfDay };
+
+/** 오늘 자정 직전(로컬 시각). startOfDay와 같은 날의 끝이다. */
 export function endOfDay(now = Date.now()) {
   const d = new Date(now);
   d.setHours(23, 59, 59, 999);
   return d.getTime();
 }
 
-export function startOfDay(now = Date.now()) {
-  const d = new Date(now);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
+/**
+ * 지금 이 카드를 꺼낼 때인가.
+ *
+ * 복습 카드(하루 이상 간격)는 종전대로 "오늘 안에 예정돼 있으면" 꺼낸다 —
+ * 아침에 열어도 그날 몫이 다 나와야 한다.
+ * 학습·재학습 단계의 하루 미만 카드는 **예정 시각이 지나야** 꺼낸다. 하루 끝까지
+ * 당겨 버리면 13시간 뒤로 잡힌 카드가 세션을 다시 열자마자 나오고, 그 자리에서
+ * Good 두 번이면 학습 단계를 건너뛰고 하루 간격으로 졸업한다.
+ */
+export function isDueNow(state, now = Date.now()) {
+  if (!state || !state.lastReview) return false;
+  const learning = state.state === STATE.LEARNING || state.state === STATE.RELEARNING;
+  const subDay = learning && !state.interval;
+  return state.due <= (subDay ? now : endOfDay(now));
 }
 
 /** 덱 선택은 계층 접두사로 동작한다. "재물"을 고르면 "재물/보험업법"도 포함된다. */
@@ -47,7 +62,6 @@ export const DEFAULT_LIMITS = { newPerDay: 20, maxReviews: 200 };
  */
 export function buildQueue(cards, states, opts = {}) {
   const now = opts.now ?? Date.now();
-  const cutoff = endOfDay(now);
   const limits = { ...DEFAULT_LIMITS, ...opts };
   const stateOf = states instanceof Map ? (id) => states.get(id) : (id) => states[id];
 
@@ -66,7 +80,7 @@ export function buildQueue(cards, states, opts = {}) {
       fresh.push({ card, state: null });
       continue;
     }
-    if (state.due <= cutoff) {
+    if (isDueNow(state, now)) {
       dueTotal += 1;
       due.push({ card, state });
     }

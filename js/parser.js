@@ -197,14 +197,24 @@ export function parseFile(path, text) {
   const lines = body.split('\n');
   const blocks = [];
   let current = null;
+  // 카드를 여는 것은 `## ` 뿐이지만, **닫는** 것은 그 밖의 제목과 수평선도 한다.
+  // SPEC 1절 "H1은 카드로 취급하지 않는다" — 취급하지 않는다는 것은 앞 카드의
+  // 뒷면으로 삼킨다는 뜻이 아니다. 닫지 않으면 절 제목(`# 2절 …`)과 `---`가
+  // 앞 카드의 뒷면에 들어가고, 빈칸 카드에서는 그게 **앞면**에까지 그대로 나온다.
+  const BREAK = /^\s{0,3}(?:#{1,6}\s|(?:-{3,}|\*{3,}|_{3,})\s*$)/;
   lines.forEach((line, i) => {
     const h = line.match(/^##\s+(.*\S)\s*$/);
     if (h) {
       if (current) blocks.push(current);
       current = { front: h[1].trim(), lines: [], line: i + 1 };
-    } else if (current) {
-      current.lines.push(line);
+      return;
     }
+    if (BREAK.test(line)) {
+      if (current) blocks.push(current);
+      current = null; // 카드를 새로 열지는 않는다
+      return;
+    }
+    if (current) current.lines.push(line);
   });
   if (current) blocks.push(current);
 
