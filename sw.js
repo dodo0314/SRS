@@ -3,7 +3,7 @@
 // 앱 껍데기는 캐시에서 즉시 내주고 뒤에서 새 버전을 받아둔다(stale-while-revalidate).
 // 다음 실행 때 새 버전이 뜬다. GitHub API 응답은 절대 캐시하지 않는다.
 
-const CACHE = 'srs-shell-v19';
+const CACHE = 'srs-shell-v20';
 const SHELL = [
   './',
   './index.html',
@@ -11,6 +11,10 @@ const SHELL = [
   './manifest.webmanifest',
   './js/app.js',
   './js/course.js',
+  './js/english.js',
+  './js/english-plan.js',
+  './js/english-content.js',
+  './js/english-assessments.js',
   './js/todo.js',
   './js/coach.js',
   './js/db.js',

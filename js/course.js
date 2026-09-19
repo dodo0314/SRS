@@ -10,7 +10,8 @@
 // 연속달성은 코스별로 따로 센다 — 하나가 무너져도 다른 하나는 남는다.
 
 import * as db from './db.js';
-import { planFor, dateKey, fourThreeTwo, TASKS } from './todo.js';
+import { planFor, dateKey } from './todo.js';
+import { renderEnglish, englishOverview } from './english.js';
 
 const DAY = 86400000;
 const STATE_KEY = 'courseState'; // { en: { days: { '2026-08-24': { done: [], status } } }, uw: … }
@@ -29,7 +30,7 @@ export const COURSES = {
     icon: '🗣️',
     deckPrefix: '영어',
     cardsTitle: '영어 오늘의 카드',
-    minLabel: '영어 오늘의 카드 + 4/3/2 한 세트',
+    minLabel: '오늘 수업 활동과 직접 쓴 기록',
     cardsDetail: 'compose 카드는 내 문장 1개(작문 코치)까지가 한 장이다.',
   },
   stats: {
@@ -123,11 +124,10 @@ const stationFromTask = (t, win) => ({
 
 /**
  * 오늘의 코스를 만든다. 하루설계(planFor)가 재료를 대고,
- * 영어 코스는 매일 도는 골격(카드→듣기→4/3/2)을 그 위에 고정으로 깐다.
+ * 영어 코스는 원문·활동·개인 기록을 묶은 30분 수업으로 연결한다.
  * 다른 코스는 strand가 자기 id인 하루설계 과업이 정거장이다.
  */
 export function buildCourse(courseId, date, ctx) {
-  const now = date.getTime();
   const plan = planFor(date, ctx.wfhDow);
 
   const banner = [];
@@ -144,26 +144,10 @@ export function buildCourse(courseId, date, ctx) {
   let stations = [cardStation(courseId, ctx)];
 
   if (courseId === 'en') {
-    // 2026-09-06 — 「좁은 읽기 — 보험 영어 한 조각」 정거장은 뺐다. 재물손사·UW를 접으면서(커리어검토/74 1절)
-    // 보험 도메인 읽기가 영어 코스의 재료에서 빠졌기 때문이다. 영어 골격은 카드 → 듣기 → 4/3/2.
-    const listen = TASKS.audio(now);
-    stations.push({
-      id: 'en-listen',
-      stage: '지식',
-      title: listen.title.replace(/^남는 시간: /, '듣기 — '),
-      dur: '10분',
-      detail: listen.detail,
-    });
-    const f = fourThreeTwo(now);
-    stations.push({ id: 'en-432', stage: f.stage, min: true, title: f.title, dur: f.dur, detail: f.detail });
-    // 하루설계에서 오는 영어 몫(전사·오류 카드화·OPIc 준비 등).
-    // 골격이 이미 덮는 종류(key)는 중복으로 넣지 않는다.
-    const covered = new Set(['432', 'listen']);
-    for (const { t, strand, win } of planTasks) {
-      if (strand !== 'en') continue;
-      if (t.key && covered.has(t.key)) continue;
-      stations.push(stationFromTask(t, win));
-    }
+    // 2026-09-19: source-backed session replaces the generic daily skeleton.
+    // Existing cards remain available inside its recall budget; no extra queue requirement.
+    stations = [{ id: 'en-session', stage: '지식', min: true, title: '무료 원문 수업과 AI 연습', dur: '30분',
+      detail: 'VOA 원문 → 직접 답하기 → 힌트·재시도 → 기록. 교육 순서와 평가는 영어 코스에서 연다.' }];
   } else {
     for (const { t, strand, win } of planTasks) {
       if (strand !== courseId) continue;
@@ -245,6 +229,10 @@ async function streakOf(courseId, date) {
 export async function refreshToday(courseId, date, ctx) {
   const key = dateKey(date);
   const { stations, banner, plan } = buildCourse(courseId, date, ctx);
+  if (courseId === 'en') {
+    const overview = await englishOverview(key);
+    return { courseId, stations, banner, plan, doneSet: new Set(overview.doneN ? ['en-session'] : []), ...overview };
+  }
   const day = await dayState(courseId, key);
   const doneSet = new Set(day.done);
   const { doneN, status } = computeStatus(courseId, stations, doneSet);
@@ -319,6 +307,7 @@ export async function renderCourseHub(container, date, ctx) {
 
 /** 코스 러너 — 정거장 순서대로 안내한다. */
 export async function renderCourseRun(container, courseId, date, ctx) {
+  if (courseId === 'en') return renderEnglish(container, dateKey(date), ctx);
   const o = await refreshToday(courseId, date, ctx);
   const meta = COURSES[courseId];
   const isDone = (s) => stationDone(s, o.doneSet);

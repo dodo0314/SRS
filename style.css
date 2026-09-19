@@ -571,3 +571,21 @@ a { color: var(--accent); }
   border: 1px solid var(--line); background: var(--surface-2);
   color: var(--text); font-size: 16px; appearance: none;
 }
+/* English course: readable source text and mobile-first activity forms. */
+.en-course { line-height: 1.65; }
+.en-course h2 { font-size: 1.25rem; margin-top: 16px; }
+.en-course h3 { font-size: 1.05rem; }
+.en-course p, .en-course li { overflow-wrap: anywhere; }
+.en-course li { margin: 8px 0; }
+.en-course textarea { width: 100%; box-sizing: border-box; margin: 8px 0; padding: 10px; font: inherit; min-height: 90px; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
+.en-course select { max-width: 100%; padding: 8px; font: inherit; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
+.en-course pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.en-panel { border: 1px solid var(--border, #8886); border-radius: 12px; margin: 16px 0; padding: 12px; }
+.en-panel summary { cursor: pointer; font-weight: 600; }
+.en-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0; }
+.en-course fieldset { min-width: 0; margin: 16px 0; padding: 12px; border: 1px solid #8886; }
+.en-choice { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+.en-choice input { width: auto; }
+.en-source { padding: 12px; border-left: 3px solid #888; }
+.en-success { font-weight: 700; }
+.en-course input[type="file"] { display: block; max-width: 100%; }

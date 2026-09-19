@@ -524,7 +524,7 @@ export async function renderTodo(container, date, wfhDow) {
       </div>`
       )
       .join('')}
-    <p class="status foot">시간표 원본(참고용) — 여기 체크는 코스와 별개다 · 재택 요일은 설정에서 변경</p>`;
+    <p class="status foot">시간표 원본(참고용) — 여기 체크는 코스와 별개다 · 영어의 현재 자료·연습 순서는 Course → 영어 코스에서 연다 · 재택 요일은 설정에서 변경</p>`;
 
   container.querySelectorAll('[data-check]').forEach((btn) =>
     btn.addEventListener('click', async () => {
