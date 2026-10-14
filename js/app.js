@@ -677,8 +677,8 @@ async function pushQuietly() {
   const client = syncClient();
   if (!client) return;
   try {
-    await client.pushState();
-    toast('기록을 저장소에 올렸다');
+    const res = await client.pushState();
+    toast(res && res.skipped ? '바뀐 기록이 없어 올리지 않았다' : '기록을 저장소에 올렸다');
   } catch (e) {
     toast(`저장 보류: ${e.message}`);
   }

@@ -95,6 +95,34 @@ export function readReviewJson(json) {
   return { states, logs, updatedAt: json.updatedAt || 0 };
 }
 
+/**
+ * 올릴 기록(payload)을 원격 review.json과 비교한다. 쓴 시각(updatedAt)은 보지 않는다.
+ * 바뀐 것이 없으면 pushState가 쓰지 않는다 — 안 그러면 복습 없이 앱을 열고 닫을 때마다
+ * 「복습 기록 37장」 같은 빈 커밋이 쌓인다(2026-10-14 검토에서 3개 확인).
+ */
+export function reviewDiff(remoteJson, payload) {
+  const remote = remoteJson && typeof remoteJson === 'object' ? remoteJson : {};
+  const remoteStates = remote.states || {};
+  let changed = 0;
+  for (const [id, arr] of Object.entries(payload.states)) {
+    if (JSON.stringify(remoteStates[id]) !== JSON.stringify(arr)) changed += 1;
+  }
+  for (const id of Object.keys(remoteStates)) {
+    if (!(id in payload.states)) changed += 1;
+  }
+  const remoteLogs = remote.logs || [];
+  const sameLogs = JSON.stringify(remoteLogs) === JSON.stringify(payload.logs);
+  const sameFormat =
+    remote.version === payload.version &&
+    JSON.stringify(remote.stateFields) === JSON.stringify(payload.stateFields) &&
+    JSON.stringify(remote.logFields) === JSON.stringify(payload.logFields);
+  return {
+    changed,
+    newLogs: Math.max(0, payload.logs.length - remoteLogs.length),
+    same: changed === 0 && sameLogs && sameFormat,
+  };
+}
+
 export const DEFAULT_CONFIG = {
   owner: '',
   repo: '',
@@ -185,10 +213,12 @@ export class Sync {
   async pushState({ retry = true } = {}) {
     const file = await this.repo.readFileIfExists(this.config.reviewPath);
     let sha = file ? file.sha : undefined;
+    let remoteJson = null;
 
     if (file) {
       try {
-        const remote = readReviewJson(JSON.parse(file.text));
+        remoteJson = JSON.parse(file.text);
+        const remote = readReviewJson(remoteJson);
         const localStates = await db.getAll(db.STORES.STATES);
         const localLogs = await db.getAll(db.STORES.LOGS);
         const { states } = mergeStates(localStates, remote.states);
@@ -197,6 +227,7 @@ export class Sync {
         await db.bulkPut(db.STORES.LOGS, logs);
       } catch {
         // 원격 파일이 깨졌으면 로컬 기록으로 덮어쓴다.
+        remoteJson = null;
       }
     }
 
@@ -205,16 +236,25 @@ export class Sync {
     const payload = buildReviewJson(states, logs);
     const text = `${JSON.stringify(payload)}\n`;
     const reviewed = Object.keys(payload.states).length;
+    const diff = reviewDiff(remoteJson, payload);
+
+    if (file && remoteJson && diff.same) {
+      // 원격이 이미 로컬과 같다. 커밋을 만들지 않고 동기화된 것으로 적는다.
+      await db.setSetting('reviewSha', file.sha);
+      await db.setSetting('lastPush', Date.now());
+      await db.setSetting('dirty', false);
+      return { reviewed, logs: payload.logs.length, changed: 0, skipped: true };
+    }
 
     try {
       const res = await this.repo.writeFile(this.config.reviewPath, text, {
         sha,
-        message: `srs: 복습 기록 ${reviewed}장`,
+        message: `srs: 복습 기록 ${diff.changed}장 갱신 (전체 ${reviewed}장)`,
       });
       await db.setSetting('reviewSha', res.sha);
       await db.setSetting('lastPush', Date.now());
       await db.setSetting('dirty', false);
-      return { reviewed, logs: payload.logs.length };
+      return { reviewed, logs: payload.logs.length, changed: diff.changed, skipped: false };
     } catch (e) {
       if (retry && (e.status === 409 || e.status === 422)) {
         return this.pushState({ retry: false });
