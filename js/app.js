@@ -10,6 +10,7 @@ import {
   buildQueue, Session, countIntroducedToday, forecast, startOfDay, isDueNow, DEFAULT_LIMITS,
 } from './queue.js';
 import { renderTodo } from './todo.js';
+import { openKanban, refreshKanban, newKanbanTask, kanbanSummary } from './kanban.js';
 import { judgeSentence, VERDICT_LABEL, ERROR_LABEL } from './coach.js';
 import {
   COURSES, ACTIVE_COURSES, BADGE, splitDeckTops, refreshToday, renderCourseHub, renderCourseRun, bannerHtml, wireBanner,
@@ -18,7 +19,7 @@ import {
 const TOKEN_KEY = 'srs.token';
 const ANTHROPIC_KEY = 'srs.anthropicKey';
 const GEMINI_KEY = 'srs.geminiKey';
-const APP_VERSION = '1.10.1';
+const APP_VERSION = '1.11.0';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
@@ -86,6 +87,18 @@ function coachConfig() {
   const g = getGeminiKey();
   if (g) return { provider: 'gemini', apiKey: g };
   return null;
+}
+
+/** 칸반이 쓰는 GitHub 클라이언트. 저장소가 연결되지 않았으면 null. */
+function kanbanRepo() {
+  const token = getToken();
+  if (!token || !state.config.owner || !state.config.repo) return null;
+  return new GitHubRepo({ ...state.config, token });
+}
+
+async function showKanban() {
+  show('kanban');
+  await openKanban($('kanban-root'), { repo: kanbanRepo, toast });
 }
 
 function syncClient() {
@@ -185,8 +198,15 @@ async function renderHub() {
     cta.onclick = () => showCourseRun(target);
   }
 
+  const kb = await kanbanSummary();
+  const kanbanSub = kb
+    ? [`할 일 ${kb.todo}`, `하는 중 ${kb.doing}`, kb.overdue ? `기한 지남 ${kb.overdue}` : '', kb.doneToday ? `오늘 완료 ${kb.doneToday}` : '']
+        .filter(Boolean)
+        .join(' · ')
+    : '할 일 · 하는 중 · 완료 · 달력';
   const courseSub = ACTIVE_COURSES.map((id) => `${COURSES[id].short} ${ov[id].doneN}/${ov[id].total} ${BADGE[ov[id].status]}`).join(' · ');
   $('hub-tiles').innerHTML = [
+    { go: 'kanban', ico: '📋', name: '할 일', sub: kanbanSub },
     { go: 'srs', ico: '🗂️', name: 'SRS', sub: `복습 ${counts.due} · 신규 ${counts.new} — 카드 자유 이용` },
     { go: 'course', ico: '🧭', name: 'Course', sub: courseSub },
     { go: 'lab', ico: '🧪', name: '실험실', sub: '하루설계' },
@@ -220,6 +240,8 @@ function goTab(t) {
     show('course');
   } else if (t === 'lab') {
     show('lab');
+  } else if (t === 'kanban') {
+    showKanban();
   } else {
     renderHome();
     show('home');
@@ -1037,6 +1059,8 @@ function wire() {
     show('course');
   });
   $('btn-sync-hub').addEventListener('click', () => syncNow());
+  $('btn-kanban-sync').addEventListener('click', () => refreshKanban());
+  $('btn-kanban-new').addEventListener('click', () => newKanbanTask());
 
   $('se-wfh').addEventListener('change', async () => {
     state.todo.wfhDow = parseInt($('se-wfh').value, 10);

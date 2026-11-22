@@ -173,6 +173,34 @@ export class GitHubRepo {
     return { sha: res.content.sha, commit: res.commit.sha };
   }
 
+  /* ---------- 이슈 (할 일 칸반) ----------
+   * 이슈는 브랜치와 상관없다. 그래서 세션이 이슈를 고치면 머지 없이 바로 앱에 보인다.
+   * 토큰에 Issues: Read and write 권한이 있어야 한다. */
+
+  /** 라벨 하나가 붙은 이슈를 열린 것·닫힌 것 모두 받는다. PR은 뺀다. */
+  async listIssues(label, { maxPages = 10 } = {}) {
+    const out = [];
+    for (let page = 1; page <= maxPages; page += 1) {
+      const batch = await this.request(
+        `/issues?labels=${encodeURIComponent(label)}&state=all&per_page=100&page=${page}`
+      );
+      if (!Array.isArray(batch)) break;
+      out.push(...batch.filter((i) => !i.pull_request));
+      if (batch.length < 100) break;
+    }
+    return out;
+  }
+
+  /** 없는 라벨은 GitHub가 새로 만든다. */
+  async createIssue({ title, body, labels }) {
+    return this.request('/issues', { method: 'POST', body: JSON.stringify({ title, body, labels }) });
+  }
+
+  /** 바꿀 칸만 넣는다. labels를 넣으면 이슈의 라벨 전체가 그것으로 바뀐다. */
+  async updateIssue(number, patch) {
+    return this.request(`/issues/${number}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  }
+
   /** 저장소 안의 파일을 웹에서 열 수 있는 주소. 근거 링크에 쓴다. */
   blobUrl(path) {
     const [file, hash] = String(path).split('#');

@@ -589,3 +589,63 @@ a { color: var(--accent); }
 .en-source { padding: 12px; border-left: 3px solid #888; }
 .en-success { font-weight: 700; }
 .en-course input[type="file"] { display: block; max-width: 100%; }
+
+/* ---------- 할 일 칸반 (js/kanban.js) ---------- */
+.kb-status { margin: 0 0 10px; }
+.kb-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 10px; scrollbar-width: none; }
+.kb-chips::-webkit-scrollbar { display: none; }
+.kb-chip {
+  flex: none; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; touch-action: manipulation;
+}
+.kb-chip[aria-pressed="true"] { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.kb-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; background: var(--surface-2); border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+.kb-tab {
+  border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600;
+  padding: 8px 2px; min-height: 40px; cursor: pointer; touch-action: manipulation; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.kb-tab[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
+.kb-list { display: flex; flex-direction: column; gap: 8px; }
+.kb-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.kb-card.is-done .kb-title { color: var(--muted); text-decoration: line-through; }
+.kb-main {
+  display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--text);
+  font: inherit; padding: 12px 14px 6px; cursor: pointer; touch-action: manipulation;
+}
+.kb-title { display: block; font-weight: 650; overflow-wrap: anywhere; }
+.kb-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.kb-meta:empty { display: none; }
+.kb-due, .kb-proj { font-size: 12px; border-radius: 999px; padding: 1px 8px; background: var(--surface-2); color: var(--muted); }
+.kb-due.soon { background: color-mix(in srgb, var(--warn) 25%, transparent); color: var(--text); }
+.kb-due.late { background: color-mix(in srgb, var(--again) 25%, transparent); color: var(--text); font-weight: 600; }
+.kb-proj { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+.kb-memo { margin: 6px 0 0; font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-acts { display: flex; justify-content: flex-end; gap: 6px; padding: 4px 10px 10px; }
+.kb-sub { font-size: 14px; color: var(--muted); margin: 14px 0 8px; font-weight: 600; }
+.kb-cal-head { display: flex; align-items: center; justify-content: space-between; }
+.kb-cal-head b { font-size: 17px; }
+.kb-cal-sum { margin: 2px 0 10px; }
+.kb-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.kb-wd { text-align: center; font-size: 12px; color: var(--muted); padding-bottom: 2px; }
+.kb-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 52px; padding: 5px 0 4px;
+  border: 1px solid transparent; border-radius: 9px; background: var(--surface); color: var(--text);
+  font: inherit; cursor: pointer; touch-action: manipulation; min-width: 0;
+}
+.kb-cell.empty { background: transparent; }
+.kb-cell.today { border-color: var(--accent); }
+.kb-cell.sel { background: color-mix(in srgb, var(--accent) 20%, var(--surface)); }
+.kb-dn { font-size: 13px; font-variant-numeric: tabular-nums; }
+.kb-marks { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
+.kb-mk {
+  font-style: normal; font-size: 10px; line-height: 15px; min-width: 15px; padding: 0 3px; border-radius: 999px;
+  text-align: center; color: #fff; font-variant-numeric: tabular-nums; display: inline-block;
+}
+.kb-mk.done { background: var(--good); }
+.kb-mk.due { background: var(--easy); }
+.kb-form .field input[type="date"], .kb-form .field textarea {
+  width: 100%; font: inherit; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 12px; color: var(--text); min-height: 48px;
+}
+.kb-form .field textarea { resize: vertical; }
+.kb-form .section-title { margin-top: 4px; }

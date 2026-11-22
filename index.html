@@ -28,7 +28,7 @@
     <div class="field">
       <label for="su-token">액세스 토큰</label>
       <input id="su-token" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="github_pat_...">
-      <p class="hint">이 기기에만 저장된다. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">토큰 발급</a> → Repository access는 저장소 하나만, Permissions는 Contents: Read and write.</p>
+      <p class="hint">이 기기에만 저장된다. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">토큰 발급</a> → Repository access는 저장소 하나만, Permissions는 Contents와 Issues 둘 다 Read and write(Issues는 할 일 칸반이 쓴다).</p>
     </div>
     <button id="su-connect" class="btn primary block">연결하고 카드 받기</button>
     <p id="su-status" class="status"></p>
@@ -144,6 +144,21 @@
       <button class="tab" data-go="settings">설정</button>
     </nav>
     <p id="sync-status" class="status foot"></p>
+  </div>
+</section>
+
+<!-- 할 일 칸반 — GitHub 이슈가 원본이다 (js/kanban.js) -->
+<section id="view-kanban" class="view" hidden>
+  <header class="bar">
+    <button class="icon-btn" data-go="hub" aria-label="뒤로">‹</button>
+    <h1>할 일</h1>
+    <div class="bar-actions">
+      <button id="btn-kanban-new" class="icon-btn" title="새 할 일" aria-label="새 할 일">＋</button>
+      <button id="btn-kanban-sync" class="icon-btn" title="새로 받기" aria-label="새로 받기">⟳</button>
+    </div>
+  </header>
+  <div class="wrap">
+    <div id="kanban-root"></div>
   </div>
 </section>
 
