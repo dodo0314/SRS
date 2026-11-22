@@ -129,6 +129,15 @@ export function projectsOf(tasks) {
   return uniqSorted(tasks.filter((t) => t.column !== 'dropped' && t.column !== 'tip' && t.project).map((t) => t.project));
 }
 
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** 기록한 시각 → `YYYY-MM-DD HH:MM:SS`(24시간, 이 기기 시간대). 없거나 틀리면 ''. */
+export function stampOf(iso) {
+  const d = new Date(iso || NaN);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${dateKey(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
 /** 팁 — 새것부터. 화면에서 카드로 쌓인다. */
 export function tipsOf(tasks) {
   return tasks.filter((t) => t.column === 'tip').sort((a, b) => b.number - a.number);
@@ -272,6 +281,7 @@ const S = {
   view: 'todo', // todo | doing | done | cal
   project: '',
   tip: false, // TIP 칩을 눌렀을 때 — 칸 줄 없이 팁 카드만
+  openTips: new Set(), // 펼친 팁 카드(이슈 번호). 이 화면에서만 기억한다
   cal: null, // { y, m }
   day: null,
   editing: null, // null | 'new' | 이슈 번호
@@ -445,13 +455,23 @@ function cardHtml(task, today) {
   </article>`;
 }
 
+// 접힌 카드는 제목·분류·기록 시각까지만. 누르면 메모와 「고치기」가 펼쳐진다
 function tipCardHtml(tip) {
-  return `<article class="kb-card kb-tip">
-    <button class="kb-main" data-act="edit" data-n="${tip.number}">
+  const open = S.openTips.has(tip.number);
+  const stamp = stampOf(tip.createdAt);
+  return `<article class="kb-card kb-tip${open ? ' is-open' : ''}">
+    <button class="kb-main" data-act="tip-toggle" data-n="${tip.number}" aria-expanded="${open}">
       <span class="kb-title">${esc(tip.title)}</span>
-      ${tip.project ? `<span class="kb-meta"><span class="kb-proj">${esc(tip.project)}</span></span>` : ''}
-      ${tip.memo ? `<p class="kb-tip-memo">${esc(tip.memo)}</p>` : ''}
+      <span class="kb-meta">${tip.project ? `<span class="kb-proj">${esc(tip.project)}</span>` : ''}${
+        stamp ? `<span class="kb-stamp">${stamp}</span>` : ''
+      }</span>
+      ${open ? (tip.memo ? `<p class="kb-tip-memo">${esc(tip.memo)}</p>` : '<p class="status">메모가 없다.</p>') : ''}
     </button>
+    ${
+      open
+        ? `<div class="kb-acts"><button class="mini-btn" data-act="edit" data-n="${tip.number}"${S.busy ? ' disabled' : ''}>고치기</button></div>`
+        : ''
+    }
   </article>`;
 }
 
@@ -647,6 +667,10 @@ function onClick(e) {
     render();
   } else if (act === 'tips') {
     S.tip = true;
+    render();
+  } else if (act === 'tip-toggle' && task) {
+    if (S.openTips.has(task.number)) S.openTips.delete(task.number);
+    else S.openTips.add(task.number);
     render();
   } else if (act === 'edit' && task) {
     S.editing = task.number;
