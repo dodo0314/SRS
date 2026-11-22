@@ -629,6 +629,9 @@ a { color: var(--accent); }
 .kb-due.late { background: color-mix(in srgb, var(--again) 25%, transparent); color: var(--text); font-weight: 600; }
 .kb-proj { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
 .kb-memo { margin: 6px 0 0; font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-tip-memo { margin: 8px 0 0; font-size: 14px; line-height: 1.55; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.kb-tip-check { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 14px; color: var(--muted); }
+.kb-form:has(input[name="tip"]:checked) .kb-due-field { display: none; } /* 팁에는 기한이 없다 */
 .kb-acts { display: flex; justify-content: flex-end; gap: 6px; padding: 4px 10px 10px; }
 .kb-sub { font-size: 14px; color: var(--muted); margin: 14px 0 8px; font-weight: 600; }
 .kb-cal-head { display: flex; align-items: center; justify-content: space-between; }
