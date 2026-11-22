@@ -14,6 +14,7 @@
 // 운동 기록(2026-11-22 본인 지시): 저장소 파일 `운동계획/기록.md`의 표를 읽어 달력에 함께 보인다.
 // 앱은 읽기만 한다. 원본은 그 파일 하나이고, 세션이 적은 기록은 main에 머지된 뒤에 보인다.
 // 표의 첫 칸이 `YYYY-MM-DD …`로 시작하는 줄만 기록으로 센다.
+// 같은 파일의 「운동 분류」 표(운동 | 분류 | 부위)로 「한 것」을 운동마다 한 줄로 나누고 분류-부위를 붙인다.
 //
 // 목록은 이 기기에 캐시한다. 오프라인이면 마지막으로 받은 목록을 보여 준다(고치기는 안 된다).
 
@@ -142,6 +143,61 @@ export function parseWorkouts(md) {
   return out;
 }
 
+/** 「운동 분류」 표 → [{ name, kind, part }]. 머리줄이 `운동 | 분류 | 부위`인 표만 읽는다. 긴 이름부터. */
+export function parseExerciseTable(md) {
+  const out = [];
+  let inTable = false;
+  for (const line of String(md || '').split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t.startsWith('|')) {
+      inTable = false;
+      continue;
+    }
+    const cells = t.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    if (cells[0] === '운동' && cells[1] === '분류' && cells[2] === '부위') {
+      inTable = true;
+      continue;
+    }
+    if (!inTable || /^:?-+:?$/.test(cells[0]) || !cells[0]) continue;
+    out.push({ name: cells[0], kind: cells[1] || '', part: cells[2] || '' });
+  }
+  return out.sort((a, b) => b.name.length - a.name.length);
+}
+
+const SESSION_TAG = /^[A-Z]날$/;
+
+/**
+ * 「한 것」 칸 → { session: 'A날' | '', items: [{ name, label, text }] }.
+ * 칸 안은 ` · `로 이어져 있고, 세트 이어 쓰기(「보조 42kg × 8」·「5 × 2」)도 같은 기호를 쓴다.
+ * 그래서 조각마다: 분류표의 이름으로 시작하면 새 운동, 숫자로 시작하거나 첫 낱말이 앞 운동에
+ * 이미 나온 말이면 앞 운동에 붙인다. 둘 다 아니면 분류 없는 새 운동이다.
+ */
+export function splitExercises(text, table) {
+  const items = [];
+  let session = '';
+  for (const raw of String(text || '').split(/\s+·\s+/)) {
+    const seg = raw.trim();
+    if (!seg) continue;
+    if (SESSION_TAG.test(seg)) {
+      session = seg;
+      continue;
+    }
+    const hit = table.find((e) => seg.startsWith(e.name));
+    const prev = items[items.length - 1];
+    const first = seg.split(/\s+/)[0];
+    if (!hit && prev && (/^\d/.test(seg) || prev.text.split(/\s+/).includes(first))) {
+      prev.text += ` · ${seg}`;
+      continue;
+    }
+    items.push({
+      name: hit ? hit.name : first,
+      label: hit ? [...new Set([hit.kind, hit.part].filter(Boolean))].join('-') : '', // 「목-목」은 「목」
+      text: seg,
+    });
+  }
+  return { session, items };
+}
+
 /** 날짜 → 그날 운동 기록들. */
 export function workoutsByDay(workouts) {
   const map = new Map();
@@ -185,6 +241,7 @@ export function summary(tasks, today = new Date()) {
 const S = {
   tasks: [],
   workouts: [],
+  exercises: [],
   fetchedAt: 0,
   error: '',
   loading: false,
@@ -208,7 +265,7 @@ export async function kanbanSummary(today = new Date()) {
 }
 
 async function saveCache() {
-  await db.setSetting(CACHE_KEY, { tasks: S.tasks, workouts: S.workouts, fetchedAt: S.fetchedAt });
+  await db.setSetting(CACHE_KEY, { tasks: S.tasks, workouts: S.workouts, exercises: S.exercises, fetchedAt: S.fetchedAt });
 }
 
 function errText(e) {
@@ -233,6 +290,7 @@ export async function openKanban(rootEl, context) {
     if (cache) {
       S.tasks = cache.tasks || [];
       S.workouts = cache.workouts || [];
+      S.exercises = cache.exercises || [];
       S.fetchedAt = cache.fetchedAt || 0;
     }
   }
@@ -258,7 +316,10 @@ export async function refreshKanban() {
       repo.readFileIfExists(WORKOUT_PATH).catch(() => undefined),
     ]);
     S.tasks = issues.map(toTask);
-    if (workoutFile !== undefined) S.workouts = workoutFile ? parseWorkouts(workoutFile.text) : [];
+    if (workoutFile !== undefined) {
+      S.workouts = workoutFile ? parseWorkouts(workoutFile.text) : [];
+      S.exercises = workoutFile ? parseExerciseTable(workoutFile.text) : [];
+    }
     S.fetchedAt = Date.now();
     S.error = '';
     await saveCache();
@@ -408,9 +469,19 @@ function calendarHtml(tasks, today) {
     const liftHtml = lifts.length
       ? `<h3 class="kb-sub">운동</h3><div class="kb-list">${lifts
           .map(
-            (w) => `<article class="kb-card kb-gym"><div class="kb-main">
-              <span class="kb-meta"><span class="kb-proj">🏋 ${esc(w.place || '운동')}</span></span>
-              <p class="kb-gym-text">${esc(w.text)}</p></div></article>`
+            (w) => {
+              const { session, items } = splitExercises(w.text, S.exercises);
+              const rows = items
+                .map(
+                  (x) => `<div class="kb-ex"><span class="kb-ex-cat${x.label ? '' : ' none'}">${esc(x.label || '분류 없음')}</span>
+                    <span class="kb-ex-txt">${esc(x.text)}</span></div>`
+                )
+                .join('');
+              return `<article class="kb-card kb-gym"><div class="kb-main">
+              <span class="kb-meta"><span class="kb-proj">🏋 ${esc(w.place || '운동')}</span>${
+                session ? `<span class="kb-due">${esc(session)}</span>` : ''
+              }</span>${rows}</div></article>`;
+            }
           )
           .join('')}</div>`
       : '';

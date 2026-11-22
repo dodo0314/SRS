@@ -653,4 +653,8 @@ a { color: var(--accent); }
 /* 운동 기록 (운동계획/기록.md를 읽기만 한다) */
 .kb-mk.gym { background: transparent; color: inherit; font-size: 11px; min-width: 0; padding: 0; }
 .kb-gym .kb-main { cursor: default; padding-bottom: 12px; }
-.kb-gym-text { margin: 6px 0 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.kb-ex { padding: 8px 0 0; }
+.kb-ex + .kb-ex { border-top: 1px solid var(--line); margin-top: 8px; }
+.kb-ex-cat { display: block; font-size: 12px; font-weight: 700; color: var(--accent); }
+.kb-ex-cat.none { color: var(--muted); font-weight: 600; }
+.kb-ex-txt { display: block; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
