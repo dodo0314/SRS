@@ -649,3 +649,8 @@ a { color: var(--accent); }
 }
 .kb-form .field textarea { resize: vertical; }
 .kb-form .section-title { margin-top: 4px; }
+
+/* 운동 기록 (운동계획/기록.md를 읽기만 한다) */
+.kb-mk.gym { background: transparent; color: inherit; font-size: 11px; min-width: 0; padding: 0; }
+.kb-gym .kb-main { cursor: default; padding-bottom: 12px; }
+.kb-gym-text { margin: 6px 0 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }

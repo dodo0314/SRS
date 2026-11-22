@@ -11,6 +11,10 @@
 //   라벨 `프로젝트:이름`  프로젝트 묶음. 하나만 쓴다
 //   본문 `기한: YYYY-MM-DD` 줄  기한. 없으면 기한 없음. 나머지 본문은 메모
 //
+// 운동 기록(2026-11-22 본인 지시): 저장소 파일 `운동계획/기록.md`의 표를 읽어 달력에 함께 보인다.
+// 앱은 읽기만 한다. 원본은 그 파일 하나이고, 세션이 적은 기록은 main에 머지된 뒤에 보인다.
+// 표의 첫 칸이 `YYYY-MM-DD …`로 시작하는 줄만 기록으로 센다.
+//
 // 목록은 이 기기에 캐시한다. 오프라인이면 마지막으로 받은 목록을 보여 준다(고치기는 안 된다).
 
 import * as db from './db.js';
@@ -18,6 +22,7 @@ import * as db from './db.js';
 export const LABEL = '칸반';
 export const DOING = '하는중';
 export const PROJECT_PREFIX = '프로젝트:';
+export const WORKOUT_PATH = '운동계획/기록.md';
 const CACHE_KEY = 'kanbanCache';
 const DAY = 86400000;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
@@ -123,6 +128,30 @@ export function calendarOf(tasks) {
   return map;
 }
 
+/** 운동 기록 표 → [{ date, place, text }]. 굵게(**)는 벗긴다. 표가 아닌 줄과 머리줄은 건너뛴다. */
+export function parseWorkouts(md) {
+  const out = [];
+  for (const line of String(md || '').split(/\r?\n/)) {
+    if (!line.trim().startsWith('|')) continue;
+    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    const m = /^(\d{4}-\d{2}-\d{2})\b/.exec(cells[0] || '');
+    if (!m) continue;
+    const clean = (s) => String(s || '').replace(/\*\*/g, '').trim();
+    out.push({ date: m[1], place: clean(cells[1]), text: clean(cells.slice(2).join(' | ')) });
+  }
+  return out;
+}
+
+/** 날짜 → 그날 운동 기록들. */
+export function workoutsByDay(workouts) {
+  const map = new Map();
+  for (const w of workouts || []) {
+    if (!map.has(w.date)) map.set(w.date, []);
+    map.get(w.date).push(w);
+  }
+  return map;
+}
+
 /** 달 하나의 칸(일요일 시작). 앞뒤 빈칸은 null. */
 export function monthGrid(year, month) {
   const first = new Date(year, month, 1);
@@ -155,6 +184,7 @@ export function summary(tasks, today = new Date()) {
 
 const S = {
   tasks: [],
+  workouts: [],
   fetchedAt: 0,
   error: '',
   loading: false,
@@ -178,7 +208,7 @@ export async function kanbanSummary(today = new Date()) {
 }
 
 async function saveCache() {
-  await db.setSetting(CACHE_KEY, { tasks: S.tasks, fetchedAt: S.fetchedAt });
+  await db.setSetting(CACHE_KEY, { tasks: S.tasks, workouts: S.workouts, fetchedAt: S.fetchedAt });
 }
 
 function errText(e) {
@@ -202,6 +232,7 @@ export async function openKanban(rootEl, context) {
     const cache = await db.getSetting(CACHE_KEY, null);
     if (cache) {
       S.tasks = cache.tasks || [];
+      S.workouts = cache.workouts || [];
       S.fetchedAt = cache.fetchedAt || 0;
     }
   }
@@ -221,8 +252,13 @@ export async function refreshKanban() {
   S.loading = true;
   render();
   try {
-    const issues = await repo.listIssues(LABEL);
+    // 운동 기록 파일은 없거나 못 읽어도 할 일은 보여야 한다 — 그때는 지난번 것을 그대로 둔다
+    const [issues, workoutFile] = await Promise.all([
+      repo.listIssues(LABEL),
+      repo.readFileIfExists(WORKOUT_PATH).catch(() => undefined),
+    ]);
     S.tasks = issues.map(toTask);
+    if (workoutFile !== undefined) S.workouts = workoutFile ? parseWorkouts(workoutFile.text) : [];
     S.fetchedAt = Date.now();
     S.error = '';
     await saveCache();
@@ -344,6 +380,7 @@ function calendarHtml(tasks, today) {
   if (!S.cal) S.cal = { y: today.getFullYear(), m: today.getMonth() };
   const { y, m } = S.cal;
   const cal = calendarOf(tasks);
+  const gym = workoutsByDay(S.workouts);
   const todayK = dateKey(today);
   const cells = monthGrid(y, m)
     .map((k) => {
@@ -351,26 +388,39 @@ function calendarHtml(tasks, today) {
       const slot = cal.get(k);
       const done = slot ? slot.done.length : 0;
       const due = slot ? slot.due.length : 0;
+      const lift = gym.has(k);
       const cls = ['kb-cell', k === todayK ? 'today' : '', k === S.day ? 'sel' : ''].filter(Boolean).join(' ');
       return `<button class="${cls}" data-act="day" data-day="${k}">
         <span class="kb-dn">${Number(k.slice(8))}</span>
-        <span class="kb-marks">${done ? `<i class="kb-mk done">${done}</i>` : ''}${due ? `<i class="kb-mk due">${due}</i>` : ''}</span>
+        <span class="kb-marks">${done ? `<i class="kb-mk done">${done}</i>` : ''}${due ? `<i class="kb-mk due">${due}</i>` : ''}${lift ? '<i class="kb-mk gym" aria-label="운동">🏋</i>' : ''}</span>
       </button>`;
     })
     .join('');
 
-  let dayHtml = '<p class="status">날짜를 누르면 그날 끝낸 일과 기한인 일이 보인다.</p>';
+  let dayHtml = '<p class="status">날짜를 누르면 그날 끝낸 일·기한인 일·운동이 보인다.</p>';
   if (S.day) {
     const slot = cal.get(S.day) || { done: [], due: [] };
     const [yy, mm, dd] = S.day.split('-').map(Number);
     const head = `${mm}/${dd} (${DOW[new Date(yy, mm - 1, dd).getDay()]})`;
     const part = (name, list) =>
       list.length ? `<h3 class="kb-sub">${name} ${list.length}</h3><div class="kb-list">${list.map((t) => cardHtml(t, today)).join('')}</div>` : '';
+    const lifts = gym.get(S.day) || [];
+    const liftHtml = lifts.length
+      ? `<h3 class="kb-sub">운동</h3><div class="kb-list">${lifts
+          .map(
+            (w) => `<article class="kb-card kb-gym"><div class="kb-main">
+              <span class="kb-meta"><span class="kb-proj">🏋 ${esc(w.place || '운동')}</span></span>
+              <p class="kb-gym-text">${esc(w.text)}</p></div></article>`
+          )
+          .join('')}</div>`
+      : '';
     dayHtml =
       `<h2 class="section-title">${head}</h2>` +
-      (part('끝낸 일', slot.done) + part('기한인 일', slot.due) || '<p class="status">이날은 기록이 없다.</p>');
+      (part('끝낸 일', slot.done) + part('기한인 일', slot.due) + liftHtml || '<p class="status">이날은 기록이 없다.</p>');
   }
 
+  const monthKey = `${y}-${String(m + 1).padStart(2, '0')}-`;
+  const monthGym = [...gym.keys()].filter((k) => k.startsWith(monthKey)).length;
   const monthDone = [...cal.entries()]
     .filter(([k]) => k.startsWith(`${y}-${String(m + 1).padStart(2, '0')}-`))
     .reduce((n, [, s]) => n + s.done.length, 0);
@@ -380,7 +430,7 @@ function calendarHtml(tasks, today) {
       <b>${y}년 ${m + 1}월</b>
       <button class="icon-btn" data-act="cal-next" aria-label="다음달">›</button>
     </div>
-    <p class="status kb-cal-sum">이달 끝낸 일 ${monthDone}개 · <i class="kb-mk done">n</i> 끝낸 일 <i class="kb-mk due">n</i> 기한</p>
+    <p class="status kb-cal-sum">이달 끝낸 일 ${monthDone}개 · 운동 ${monthGym}일<br><i class="kb-mk done">n</i> 끝낸 일 <i class="kb-mk due">n</i> 기한 <i class="kb-mk gym">🏋</i> 운동</p>
     <div class="kb-cal">${DOW.map((d) => `<span class="kb-wd">${d}</span>`).join('')}${cells}</div>
     ${dayHtml}`;
 }
