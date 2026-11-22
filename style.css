@@ -99,7 +99,16 @@ body {
   z-index: 5;
 }
 .bar h1 { font-size: 18px; margin: 0; font-weight: 650; }
-.bar-actions { display: flex; gap: 4px; }
+.bar-actions { display: flex; align-items: center; gap: 4px; }
+/* 홈 위쪽: 동기화(크게) · 앱 갱신 · 설정 */
+.icon-btn.sync-big { font-size: 30px; line-height: 1; min-width: 48px; height: 48px; }
+.bar-pill {
+  height: 34px; padding: 0 14px; margin: 0 4px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; touch-action: manipulation; white-space: nowrap;
+}
+.bar-pill:active { background: var(--line); }
+.bar-pill:disabled { opacity: .45; }
 
 .icon-btn {
   min-width: 44px;

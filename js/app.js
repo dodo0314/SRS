@@ -19,7 +19,7 @@ import {
 const TOKEN_KEY = 'srs.token';
 const ANTHROPIC_KEY = 'srs.anthropicKey';
 const GEMINI_KEY = 'srs.geminiKey';
-const APP_VERSION = '1.13.0';
+const APP_VERSION = '1.13.1';
 const DAY = 86400000;
 
 const $ = (id) => document.getElementById(id);
@@ -890,10 +890,23 @@ async function importData(file) {
 // ① 새 서비스워커가 있으면 받아서 활성화될 때까지 기다리고
 // ② 지금 워커에게 셸 파일을 캐시 우회로 다시 받게 한 뒤
 // ③ 새로고침한다. 복습 기록·설정(IndexedDB)은 건드리지 않는다.
-async function refreshApp() {
-  const btn = $('btn-refresh-app');
-  const status = $('refresh-status');
-  btn.disabled = true;
+/**
+ * 앱 갱신 — 설정의 「지금 갱신」과 홈 위쪽 「갱신」 단추가 같이 쓴다.
+ * 진행 상황은 설정에서는 그 아래 줄에, 홈에서는 알림(toast)으로 보인다.
+ */
+async function refreshApp(from = 'settings') {
+  const btns = [$('btn-refresh-app'), $('btn-refresh-hub')];
+  const line = $('refresh-status');
+  const status = {
+    set textContent(msg) {
+      if (from === 'hub') toast(msg, 20000);
+      else line.textContent = msg;
+    },
+    set className(c) {
+      if (from !== 'hub') line.className = c;
+    },
+  };
+  btns.forEach((b) => (b.disabled = true));
   try {
     if ('serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.getRegistration();
@@ -931,7 +944,7 @@ async function refreshApp() {
     status.textContent = '새로고침…';
     location.reload();
   } catch (e) {
-    btn.disabled = false;
+    btns.forEach((b) => (b.disabled = false));
     status.textContent = `갱신 실패: ${e.message}`;
     status.className = 'status err';
   }
@@ -1119,7 +1132,8 @@ function wire() {
     }
   });
 
-  $('btn-refresh-app').addEventListener('click', refreshApp);
+  $('btn-refresh-app').addEventListener('click', () => refreshApp('settings'));
+  $('btn-refresh-hub').addEventListener('click', () => refreshApp('hub'));
   $('btn-export').addEventListener('click', exportData);
   $('btn-import').addEventListener('click', () => $('file-import').click());
   $('file-import').addEventListener('change', (e) => {
