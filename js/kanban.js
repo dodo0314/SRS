@@ -430,6 +430,7 @@ function render() {
   if (S.project && !projects.includes(S.project)) S.project = '';
   const pick = S.project ? live.filter((t) => t.project === S.project) : live;
   const board = boardOf(pick);
+  const doneToday = summary(pick, today).doneToday; // 오늘 끝낸 수 — 날짜가 바뀌면 0부터
 
   const statusBits = [];
   if (S.loading) statusBits.push('받는 중…');
@@ -450,7 +451,7 @@ function render() {
   const tabs = [
     ['todo', `할 일 ${board.todo.length}`],
     ['doing', `하는 중 ${board.doing.length}`],
-    ['done', '완료'],
+    ['done', `완료 ${doneToday}`],
     ['cal', '달력'],
   ]
     .map(([v, l]) => `<button class="kb-tab" data-act="view" data-view="${v}" aria-pressed="${S.view === v}">${l}</button>`)
@@ -484,7 +485,7 @@ function onClick(e) {
   else if (act === 'todo' && task) move(task, 'todo');
   else if (act === 'reopen' && task) move(task, 'todo');
   else if (act === 'done' && task) {
-    move(task, 'done').then((ok) => ok && ctx.toast('완료했다'));
+    move(task, 'done').then((ok) => ok && ctx.toast('완료'));
   } else if (act === 'drop' && task) {
     if (!confirm(`「${task.title}」을(를) 지울까?`)) return;
     S.editing = null;
