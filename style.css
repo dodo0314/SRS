@@ -100,7 +100,7 @@ body {
 }
 .bar h1 { font-size: 18px; margin: 0; font-weight: 650; }
 .bar-actions { display: flex; align-items: center; gap: 4px; }
-/* 크게 보이는 위쪽 단추: 홈의 동기화, 할 일의 ＋·새로 받기 */
+/* 크게 보이는 위쪽 단추: 홈의 동기화, 할 일의 새로 받기·＋ */
 .icon-btn.sync-big { font-size: 30px; line-height: 1; min-width: 48px; height: 48px; }
 .bar-pill {
   height: 34px; padding: 0 14px; margin: 0 4px; border: 1px solid var(--line); border-radius: 999px;
